@@ -1,0 +1,9 @@
+streamlit>=1.40.0
+sqlalchemy>=2.0
+requests>=2.31
+beautifulsoup4>=4.12
+feedparser>=6.0
+openai>=1.50
+python-dateutil>=2.9
+lxml>=5.0
+pytest>=8.0

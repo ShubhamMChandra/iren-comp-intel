@@ -1,0 +1,63 @@
+---
+description: Iren Sales Intelligence platform — architecture, tech stack, and project conventions
+alwaysApply: true
+---
+
+# Iren Sales Intelligence Platform
+
+## Tech Stack
+- **Python 3.14**, SQLAlchemy 2.x ORM, SQLite (single file at `data/iren_intel.db`)
+- **Streamlit** for the web UI (multi-page via sidebar radio, NOT `st.Page`)
+- **OpenRouter** (OpenAI-compatible) for generation: summaries, classification, briefs — every AI function has a keyword-based fallback
+- **Ollama** (local) for embeddings only: signal dedup, semantic search, similar signals — graceful no-op when Ollama isn't running
+- **pytest** for testing with in-memory SQLite fixtures
+
+## Architecture
+
+```
+app.py              → Streamlit entrypoint, sidebar nav, page routing
+config.py           → All env vars, constants, signal/source types
+database/
+  models.py         → SQLAlchemy models: Company, Signal, ProspectScore, CompetitorEvent
+  db.py             → Engine, SessionLocal, init_db(), get_session()
+  seed.py           → Initial prospect + competitor company data
+collectors/
+  base.py           → BaseCollector with dedup + session management
+  news_collector.py → RSS + Google News
+  funding_collector.py → Funding signal regex classification
+  jobs_collector.py → Infrastructure hiring keyword detection
+  sec_collector.py  → SEC EDGAR filings
+  runner.py         → CLI orchestrator for collectors
+scoring/
+  weights.py        → Signal weight config (max_points, base_points, halflife)
+  engine.py         → Recency decay, magnitude multiplier, score_prospect()
+ai/
+  embeddings.py     → Ollama-powered embeddings: get_embedding(), cosine_similarity(), dedup
+  embed_backfill.py → One-time script to embed all existing signals
+  summarizer.py     → Article summarization (OpenRouter + fallback)
+  signal_extractor.py → Signal classification (OpenRouter + fallback)
+  brief_generator.py  → Sales brief generation (OpenRouter + fallback)
+pages/
+  dashboard.py      → Home screen with metrics, top prospects, recent signals
+  prospects.py      → Filterable prospect list with scores + AI briefs
+  competitors.py    → Competitor cards + side-by-side comparison
+  signal_feed.py    → Chronological signal stream with filters
+  settings.py       → Company management, scoring config, system status
+tests/              → pytest suite with in-memory DB fixtures
+```
+
+## Key Conventions
+- Company has `company_type`: either `"prospect"` or `"competitor"`
+- Signal types: `fundraising`, `funding_completed`, `hiring`, `ai_initiative`, `cloud_spend`, `outgrowing`
+- Source types: `sec_filing`, `major_news`, `industry_news`, `blog`, `social_media`, `rumor`
+- Scoring: 6 categories sum to max 100 points with exponential recency decay
+- Every AI generation function must have a `_fallback_*` that works without an API key
+- Embeddings are stored as JSON-serialized float lists in `Signal.embedding`
+
+## Ollama Conventions
+- Ollama is used ONLY for embeddings (`nomic-embed-text`), NOT for generation
+- Config: `OLLAMA_BASE_URL` and `OLLAMA_EMBED_MODEL` in `config.py`
+- All embedding calls go through `ai/embeddings.py` — never call Ollama directly
+- Every embedding path wraps in try/except and falls back gracefully (exact-title dedup, keyword search) when Ollama isn't running
+- Backfill existing signals: `python -m ai.embed_backfill`
+- Embedding tests use mocked responses so they run without Ollama

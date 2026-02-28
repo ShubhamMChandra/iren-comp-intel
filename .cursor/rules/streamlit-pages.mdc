@@ -1,0 +1,40 @@
+---
+description: Streamlit UI page conventions
+globs: pages/**/*.py, app.py
+alwaysApply: false
+---
+
+# Streamlit Page Conventions
+
+## Page Structure
+Every page exports `render()`, called by `app.py`. One session per render, wrapped safely:
+
+```python
+def render():
+    st.title("Page Name")
+    st.caption("One-line description")
+    session = get_session()
+    try:
+        # ... queries and UI ...
+    finally:
+        session.close()
+```
+
+## Standardized Elements
+
+Signal type icons (reuse this exact map):
+```python
+TYPE_ICONS = {
+    "fundraising": "💰", "funding_completed": "✅",
+    "hiring": "👤", "ai_initiative": "🤖",
+    "cloud_spend": "☁️", "outgrowing": "📈",
+}
+```
+
+Score colors: green (≥30), yellow (≥15), red (<15).
+
+## Rules
+- `.limit()` all display queries (12 signals, 15 rankings, 5 events)
+- Truncate strings: `title[:200]`, `description[:300]`
+- Gate AI calls behind `st.button` + `st.spinner`, never auto-run on load
+- "No data" states use `st.info()` with instructions to populate

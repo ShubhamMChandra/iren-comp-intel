@@ -1,0 +1,39 @@
+---
+description: Database and SQLAlchemy patterns — models, queries, collectors
+globs: database/**/*.py, collectors/**/*.py, scoring/**/*.py, ai/**/*.py
+alwaysApply: false
+---
+
+# Database Patterns
+
+## Models
+- All models inherit from `database.models.Base`
+- Use `Column()` with explicit types and `nullable`
+- Add `index=True` on columns used in WHERE/ORDER BY
+- Relationships use `back_populates` with `cascade="all, delete-orphan"`
+- Timestamps: `default=lambda: datetime.now(timezone.utc)` — always UTC
+
+## Queries
+- Avoid N+1: don't query inside a loop. Use subqueries or `joinedload`:
+
+```python
+# BAD — 32 queries
+for p in prospects:
+    score = session.query(ProspectScore).filter(...).first()
+
+# GOOD — 1 query
+from sqlalchemy import func
+latest = (
+    session.query(ProspectScore.company_id, func.max(ProspectScore.scored_at).label("max_date"))
+    .group_by(ProspectScore.company_id).subquery()
+)
+```
+
+- Always `.limit()` queries displayed in the UI
+- Filter with SQLAlchemy expressions, not Python loops on large sets
+
+## Collectors
+- Inherit from `BaseCollector` — it handles session + `finish()` commit/close
+- Always use `_create_signal()` for dedup; never `session.add(Signal(...))` directly
+- Wrap HTTP calls in `try/except` per-item
+- Call `self.finish()` at the end of `collect()`

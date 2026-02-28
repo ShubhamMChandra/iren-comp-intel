@@ -1,0 +1,29 @@
+---
+description: Testing conventions specific to this project's pytest setup
+globs: tests/**/*.py
+alwaysApply: false
+---
+
+# Testing Standards
+
+## Fixtures (defined in `tests/conftest.py`)
+- `engine` / `session` — in-memory SQLite, never the real DB
+- `sample_prospect` — a Company with type="prospect"
+- `sample_competitor` — a Company with type="competitor"
+- `sample_signals` — 5 signals attached to sample_prospect
+
+## Patterns
+- One test file per source module (`test_models.py`, `test_scoring.py`, etc.)
+- Group in classes: `class TestRecencyDecay`, `class TestFundingClassification`
+- `@pytest.mark.parametrize` for testing regex/keyword classifiers against many inputs
+- `pytest.approx()` for float comparisons (never `==` on floats)
+- To test a method without full collector init:
+
+```python
+collector = FundingCollector.__new__(FundingCollector)
+result = collector._classify_funding("company raised $50m")
+```
+
+## Scope
+- Test: scoring math, regex classifiers, keyword matchers, model relationships, AI fallbacks, edge cases
+- Skip: Streamlit rendering, external HTTP calls, SQLAlchemy/SQLite internals

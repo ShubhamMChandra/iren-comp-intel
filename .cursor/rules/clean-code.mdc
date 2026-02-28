@@ -1,0 +1,62 @@
+---
+description: Clean code standards specific to this project
+alwaysApply: true
+---
+
+# Clean Code Standards
+
+## Error Handling
+- Never use bare `except:` — catch specific exceptions
+- Collectors: catch per-item so one failure doesn't skip the rest
+- UI pages: use `st.error()` for user-facing errors
+- Always close sessions even on error:
+
+```python
+session = get_session()
+try:
+    results = session.query(Company).all()
+finally:
+    session.close()
+```
+
+When a function accepts an optional `session`, only close what it created:
+
+```python
+def do_work(session=None) -> Result:
+    own_session = session is None
+    if own_session:
+        session = get_session()
+    try:
+        # ... work ...
+    finally:
+        if own_session:
+            session.close()
+```
+
+## Data Flow
+- Config values come from `config.py` (env vars with defaults), never hardcoded
+- New constants go in `config.py` (types, feeds) or `scoring/weights.py` (score params)
+- Pass `session` explicitly rather than creating sessions deep in call stacks
+
+## Module Headers
+Every major module (`config.py`, `database/models.py`, `database/db.py`, `scoring/engine.py`, `scoring/weights.py`, `ai/embeddings.py`, `ai/summarizer.py`, `ai/signal_extractor.py`, `ai/brief_generator.py`, `collectors/base.py`, `collectors/runner.py`) must start with a 3-line comment header:
+
+```python
+# Why: <8 words max>
+# Deps: <8 words max>
+# How: <8 words max>
+```
+
+Example:
+
+```python
+# Why: Scores prospects from collected signal data
+# Deps: SQLAlchemy models, weights config, datetime
+# How: Recency-decayed weighted sum per signal type
+```
+
+Page files (`pages/*.py`) and test files are excluded.
+
+## Type Hints
+- Add type hints on function signatures (params and return types)
+- Use `X | None` syntax over `Optional[X]`

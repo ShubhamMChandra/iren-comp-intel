@@ -1,0 +1,21 @@
+## Iren Sales Intelligence Platform
+
+Python 3.14 / Streamlit / SQLAlchemy / SQLite / OpenRouter (generation) / Ollama (local embeddings)
+
+Sales intelligence tool for Iren's commercial team. Scores prospect companies (AI labs, hyperscalers, enterprise) based on public signals (funding, hiring, AI initiatives), with a competitive intelligence layer for market context.
+
+### Project Layout
+- `app.py` — Streamlit entrypoint
+- `config.py` — env vars, constants, all signal/source type enums
+- `database/` — SQLAlchemy models (Company, Signal, ProspectScore, CompetitorEvent), session management, seed data
+- `collectors/` — data pipeline: news (RSS), funding (regex), jobs (keywords), SEC EDGAR filings
+- `scoring/` — weighted scoring engine with recency decay, max 100 points across 6 categories
+- `ai/` — OpenRouter for generation (summarizer, classifier, brief generator) with keyword fallbacks; Ollama for local embeddings (dedup, semantic search, similar signals) with graceful no-op fallback
+- `pages/` — Streamlit pages: dashboard, prospects, competitors, signal feed, settings
+- `tests/` — pytest suite using in-memory SQLite fixtures
+
+### How I Work
+- I'm an intermediate Python student. Explain concepts when relevant, suggest better approaches when I'm going the wrong way, but run/build first and teach after.
+- Prefer small, targeted changes over rewrites.
+- Always run tests (`python -m pytest tests/ -v`) after code changes.
+- Detailed rules live in `.cursor/rules/` — check there for session management patterns, testing conventions, page structure, and multi-file task checklists.

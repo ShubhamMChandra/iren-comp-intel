@@ -1,0 +1,688 @@
+"""
+FastAPI layer exposing the existing Python backend as JSON endpoints.
+Thin wrapper — all business logic lives in the existing modules.
+"""
+
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from database.db import get_session, init_db
+from database.models import Company, CompetitorEvent, ProspectBrief, ProspectScore, Signal
+from scoring.engine import get_latest_scores, get_score_deltas, score_all_prospects
+from scoring.weights import SIGNAL_WEIGHTS
+from ai.brief_generator import generate_brief, generate_outreach_email, generate_battle_card
+from ai.client import get_ai_client, call_with_fallback
+from config import SIGNAL_TYPES
+
+init_db()
+
+app = FastAPI(title="Iren Sales Intelligence API", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _company_dict(c: Company, score: ProspectScore | None = None, delta: float = 0.0) -> dict:
+    return {
+        "id": c.id,
+        "name": c.name,
+        "company_type": c.company_type,
+        "industry": c.industry,
+        "website": c.website,
+        "description": c.description,
+        "hq_location": c.hq_location,
+        "employee_count": c.employee_count,
+        "founded_year": c.founded_year,
+        "is_public": c.is_public,
+        "ticker": c.ticker,
+        "capacity_mw": c.capacity_mw,
+        "gpu_count": c.gpu_count,
+        "known_pricing": c.known_pricing,
+        "total_funding": c.total_funding,
+        "last_funding_amount": c.last_funding_amount,
+        "score": _score_dict(score) if score else None,
+        "delta": round(delta, 1),
+    }
+
+
+def _score_dict(s: ProspectScore) -> dict:
+    return {
+        "total": round(s.total_score, 1),
+        "fundraising": round(s.fundraising_score, 1),
+        "funding_completed": round(s.funding_completed_score, 1),
+        "hiring": round(s.hiring_score, 1),
+        "ai_initiative": round(s.ai_initiative_score, 1),
+        "cloud_spend": round(s.cloud_spend_score, 1),
+        "outgrowing": round(s.outgrowing_score, 1),
+        "scored_at": s.scored_at.isoformat() if s.scored_at else None,
+    }
+
+
+def _signal_dict(s: Signal) -> dict:
+    return {
+        "id": s.id,
+        "company_id": s.company_id,
+        "signal_type": s.signal_type,
+        "title": s.title,
+        "summary": s.summary,
+        "source_url": s.source_url,
+        "source_type": s.source_type,
+        "magnitude": s.magnitude,
+        "detected_at": s.detected_at.isoformat() if s.detected_at else None,
+    }
+
+
+def _event_dict(e: CompetitorEvent) -> dict:
+    return {
+        "id": e.id,
+        "company_id": e.company_id,
+        "event_type": e.event_type,
+        "title": e.title,
+        "description": e.description,
+        "source_url": e.source_url,
+        "detected_at": e.detected_at.isoformat() if e.detected_at else None,
+    }
+
+
+def _tier_label(score: float, all_scores: list[float]) -> str:
+    if not all_scores or score == 0:
+        return "DORMANT"
+    sorted_scores = sorted(all_scores)
+    rank = sum(1 for s in sorted_scores if s <= score)
+    percentile = rank / len(sorted_scores)
+    if percentile >= 0.90:
+        return "VERY HIGH"
+    if percentile >= 0.70:
+        return "HIGH"
+    if percentile >= 0.40:
+        return "MEDIUM"
+    if percentile >= 0.10:
+        return "LOW"
+    return "DORMANT"
+
+
+def _top_signal_type(session, company_id: int) -> str | None:
+    sig = (
+        session.query(Signal)
+        .filter(Signal.company_id == company_id, Signal.is_active == True, Signal.signal_type != "other")
+        .order_by(Signal.detected_at.desc())
+        .first()
+    )
+    return sig.signal_type if sig else None
+
+
+def _signal_counts_7d(session, company_ids: list[int]) -> dict[int, int]:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    results = (
+        session.query(Signal.company_id, Signal.id)
+        .filter(Signal.company_id.in_(company_ids), Signal.detected_at >= cutoff)
+        .all()
+    )
+    counts: dict[int, int] = {}
+    for cid, _ in results:
+        counts[cid] = counts.get(cid, 0) + 1
+    return counts
+
+
+# ---------------------------------------------------------------------------
+# Prospects
+# ---------------------------------------------------------------------------
+
+@app.get("/api/prospects")
+def list_prospects():
+    session = get_session()
+    try:
+        prospects = session.query(Company).filter(Company.company_type == "prospect").order_by(Company.name).all()
+        score_map = get_latest_scores(session)
+        deltas = get_score_deltas(session)
+        all_scores = [s.total_score for s in score_map.values() if s.total_score > 0]
+        sig_counts = _signal_counts_7d(session, [p.id for p in prospects])
+
+        result = []
+        for p in prospects:
+            score = score_map.get(p.id)
+            d = _company_dict(p, score, deltas.get(p.id, 0.0))
+            d["tier"] = _tier_label(score.total_score if score else 0, all_scores)
+            d["signals_7d"] = sig_counts.get(p.id, 0)
+            d["top_signal_type"] = _top_signal_type(session, p.id)
+            result.append(d)
+
+        result.sort(key=lambda x: (x["score"]["total"] if x["score"] else 0), reverse=True)
+        return result
+    finally:
+        session.close()
+
+
+@app.get("/api/prospects/{prospect_id}")
+def get_prospect(prospect_id: int):
+    session = get_session()
+    try:
+        company = session.query(Company).filter(Company.id == prospect_id).first()
+        if not company:
+            raise HTTPException(status_code=404, detail="Prospect not found")
+
+        score_map = get_latest_scores(session)
+        deltas = get_score_deltas(session)
+        all_scores = [s.total_score for s in score_map.values() if s.total_score > 0]
+        score = score_map.get(company.id)
+
+        d = _company_dict(company, score, deltas.get(company.id, 0.0))
+        d["tier"] = _tier_label(score.total_score if score else 0, all_scores)
+
+        signals = (
+            session.query(Signal)
+            .filter(Signal.company_id == company.id, Signal.is_active == True)
+            .order_by(Signal.detected_at.desc())
+            .limit(20)
+            .all()
+        )
+        d["signals"] = [_signal_dict(s) for s in signals]
+
+        cached_story = (
+            session.query(ProspectBrief)
+            .filter(
+                ProspectBrief.company_id == company.id,
+                ProspectBrief.brief_type == "score_story",
+            )
+            .order_by(ProspectBrief.generated_at.desc())
+            .first()
+        )
+        d["score_story"] = cached_story.brief_text if cached_story else None
+
+        return d
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Signals
+# ---------------------------------------------------------------------------
+
+@app.get("/api/signals")
+def list_signals(
+    signal_type: str | None = None,
+    company_id: int | None = None,
+    days: int = Query(default=7, ge=1, le=365),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    session = get_session()
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        q = session.query(Signal).filter(Signal.detected_at >= cutoff, Signal.is_active == True)
+        if signal_type:
+            q = q.filter(Signal.signal_type == signal_type)
+        if company_id:
+            q = q.filter(Signal.company_id == company_id)
+        signals = q.order_by(Signal.detected_at.desc()).limit(limit).all()
+        return [_signal_dict(s) for s in signals]
+    finally:
+        session.close()
+
+
+@app.get("/api/signals/stats")
+def signal_stats(days: int = Query(default=7, ge=1, le=365)):
+    session = get_session()
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        signals = (
+            session.query(Signal)
+            .filter(Signal.detected_at >= cutoff, Signal.is_active == True)
+            .all()
+        )
+        by_type: dict[str, int] = {}
+        for s in signals:
+            by_type[s.signal_type] = by_type.get(s.signal_type, 0) + 1
+        return {"period_days": days, "total": len(signals), "by_type": by_type}
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Competitors
+# ---------------------------------------------------------------------------
+
+@app.get("/api/competitors")
+def list_competitors():
+    session = get_session()
+    try:
+        competitors = session.query(Company).filter(Company.company_type == "competitor").order_by(Company.name).all()
+        result = []
+        for c in competitors:
+            d = _company_dict(c)
+            signals = (
+                session.query(Signal)
+                .filter(Signal.company_id == c.id)
+                .order_by(Signal.detected_at.desc())
+                .limit(3)
+                .all()
+            )
+            events = (
+                session.query(CompetitorEvent)
+                .filter(CompetitorEvent.company_id == c.id)
+                .order_by(CompetitorEvent.detected_at.desc())
+                .limit(3)
+                .all()
+            )
+            d["signals"] = [_signal_dict(s) for s in signals]
+            d["events"] = [_event_dict(e) for e in events]
+            result.append(d)
+        return result
+    finally:
+        session.close()
+
+
+@app.get("/api/competitors/{competitor_id}")
+def get_competitor(competitor_id: int):
+    session = get_session()
+    try:
+        company = session.query(Company).filter(Company.id == competitor_id).first()
+        if not company:
+            raise HTTPException(status_code=404, detail="Competitor not found")
+        d = _company_dict(company)
+        signals = (
+            session.query(Signal)
+            .filter(Signal.company_id == company.id)
+            .order_by(Signal.detected_at.desc())
+            .limit(10)
+            .all()
+        )
+        events = (
+            session.query(CompetitorEvent)
+            .filter(CompetitorEvent.company_id == company.id)
+            .order_by(CompetitorEvent.detected_at.desc())
+            .limit(10)
+            .all()
+        )
+        d["signals"] = [_signal_dict(s) for s in signals]
+        d["events"] = [_event_dict(e) for e in events]
+        return d
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+@app.get("/api/dashboard")
+def dashboard():
+    session = get_session()
+    try:
+        prospects = session.query(Company).filter(Company.company_type == "prospect").all()
+        score_map = get_latest_scores(session)
+        deltas = get_score_deltas(session)
+        all_scores = [s.total_score for s in score_map.values() if s.total_score > 0]
+
+        cutoff_7d = datetime.now(timezone.utc) - timedelta(days=7)
+        cutoff_14d = datetime.now(timezone.utc) - timedelta(days=14)
+
+        actionable_signals_7d = (
+            session.query(Signal)
+            .filter(Signal.detected_at >= cutoff_7d, Signal.is_active == True, Signal.signal_type != "other")
+            .count()
+        )
+        actionable_prior = (
+            session.query(Signal)
+            .filter(Signal.detected_at >= cutoff_14d, Signal.detected_at < cutoff_7d, Signal.is_active == True, Signal.signal_type != "other")
+            .count()
+        )
+
+        active_count = sum(1 for s in score_map.values() if s.total_score > 0)
+
+        hot_prospects = []
+        for p in prospects:
+            s = score_map.get(p.id)
+            if s and _tier_label(s.total_score, all_scores) in ("VERY HIGH", "HIGH"):
+                hot_prospects.append({
+                    "id": p.id,
+                    "name": p.name,
+                    "score": round(s.total_score, 1),
+                    "tier": _tier_label(s.total_score, all_scores),
+                })
+        hot_prospects.sort(key=lambda x: x["score"], reverse=True)
+        hot_count = len(hot_prospects)
+
+        ranked = sorted(
+            [(p, score_map.get(p.id), deltas.get(p.id, 0.0)) for p in prospects if score_map.get(p.id)],
+            key=lambda x: x[1].total_score,
+            reverse=True,
+        )
+
+        hottest = max(ranked, key=lambda x: abs(x[2]), default=None) if ranked else None
+
+        signal_breakdown: dict[str, int] = {}
+        cutoff_sigs = (
+            session.query(Signal)
+            .filter(Signal.detected_at >= cutoff_7d, Signal.is_active == True, Signal.signal_type != "other")
+            .all()
+        )
+        for sig in cutoff_sigs:
+            signal_breakdown[sig.signal_type] = signal_breakdown.get(sig.signal_type, 0) + 1
+
+        def _score_breakdown(score: ProspectScore) -> dict:
+            return {
+                "fundraising": round(score.fundraising_score, 1),
+                "funding_completed": round(score.funding_completed_score, 1),
+                "hiring": round(score.hiring_score, 1),
+                "ai_initiative": round(score.ai_initiative_score, 1),
+                "cloud_spend": round(score.cloud_spend_score, 1),
+                "outgrowing": round(score.outgrowing_score, 1),
+            }
+
+        def _latest_signal_headline(company_id: int) -> str | None:
+            sig = (
+                session.query(Signal)
+                .filter(
+                    Signal.company_id == company_id,
+                    Signal.is_active == True,
+                    Signal.signal_type != "other",
+                )
+                .order_by(Signal.detected_at.desc())
+                .first()
+            )
+            return sig.title if sig else None
+
+        call_list = []
+        for company, score, delta in sorted(ranked, key=lambda x: x[2], reverse=True):
+            if delta <= 0:
+                break
+            headline = _latest_signal_headline(company.id)
+            call_list.append({
+                "id": company.id,
+                "name": company.name,
+                "industry": company.industry,
+                "score": round(score.total_score, 1),
+                "tier": _tier_label(score.total_score, all_scores),
+                "delta": round(delta, 1),
+                "top_signal_type": _top_signal_type(session, company.id),
+                "headline": headline,
+                "score_breakdown": _score_breakdown(score),
+            })
+            if len(call_list) >= 8:
+                break
+
+        cooling = []
+        for company, score, delta in sorted(ranked, key=lambda x: x[2]):
+            if delta >= 0:
+                break
+            cooling.append({
+                "id": company.id,
+                "name": company.name,
+                "industry": company.industry,
+                "score": round(score.total_score, 1),
+                "tier": _tier_label(score.total_score, all_scores),
+                "delta": round(delta, 1),
+                "top_signal_type": _top_signal_type(session, company.id),
+                "score_breakdown": _score_breakdown(score),
+            })
+            if len(cooling) >= 5:
+                break
+
+        top_ranked = []
+        for company, score, delta in ranked[:10]:
+            top_ranked.append({
+                "id": company.id,
+                "name": company.name,
+                "industry": company.industry,
+                "score": round(score.total_score, 1),
+                "tier": _tier_label(score.total_score, all_scores),
+                "delta": round(delta, 1),
+                "top_signal_type": _top_signal_type(session, company.id),
+                "score_breakdown": _score_breakdown(score),
+            })
+
+        comp_events = (
+            session.query(CompetitorEvent)
+            .order_by(CompetitorEvent.detected_at.desc())
+            .limit(5)
+            .all()
+        )
+        all_companies = {c.id: c for c in session.query(Company).all()}
+        alerts = []
+        for e in comp_events:
+            comp = all_companies.get(e.company_id)
+            alerts.append({
+                "company_name": comp.name if comp else "Unknown",
+                "event_type": e.event_type,
+                "title": e.title,
+                "detected_at": e.detected_at.isoformat() if e.detected_at else None,
+            })
+
+        return {
+            "kpis": {
+                "active_prospects": active_count,
+                "pipeline_hot": hot_count,
+                "hot_prospects": hot_prospects,
+                "signals_7d": actionable_signals_7d,
+                "signals_delta": actionable_signals_7d - actionable_prior,
+                "signal_breakdown": signal_breakdown,
+                "hottest_mover": {
+                    "name": hottest[0].name,
+                    "id": hottest[0].id,
+                    "delta": round(hottest[2], 1),
+                    "score": round(hottest[1].total_score, 1),
+                    "top_signal_type": _top_signal_type(session, hottest[0].id),
+                } if hottest else None,
+            },
+            "call_list": call_list,
+            "cooling": cooling,
+            "top_ranked": top_ranked,
+            "alerts": alerts,
+        }
+    finally:
+        session.close()
+
+
+@app.get("/api/dashboard/digest")
+def dashboard_digest():
+    session = get_session()
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=1)
+        cached = (
+            session.query(ProspectBrief)
+            .filter(ProspectBrief.brief_type == "daily_digest", ProspectBrief.generated_at >= cutoff)
+            .order_by(ProspectBrief.generated_at.desc())
+            .first()
+        )
+        if cached:
+            return {"digest": cached.brief_text}
+
+        cutoff_7d = datetime.now(timezone.utc) - timedelta(days=7)
+        signals = (
+            session.query(Signal)
+            .filter(Signal.detected_at >= cutoff_7d, Signal.is_active == True)
+            .order_by(Signal.detected_at.desc())
+            .limit(50)
+            .all()
+        )
+        score_map = get_latest_scores(session)
+        deltas = get_score_deltas(session)
+        all_companies = {c.id: c for c in session.query(Company).all()}
+
+        context_lines = ["SIGNALS THIS WEEK:"]
+        for s in signals[:30]:
+            comp = all_companies.get(s.company_id)
+            name = comp.name if comp else "Unknown"
+            context_lines.append(f"  [{s.signal_type}] {name}: {s.title[:120]}")
+
+        context_lines.append("\nTOP MOVERS:")
+        ranked = sorted(deltas.items(), key=lambda x: abs(x[1]), reverse=True)[:10]
+        for cid, d in ranked:
+            comp = all_companies.get(cid)
+            score = score_map.get(cid)
+            if comp and score:
+                context_lines.append(f"  {comp.name}: {score.total_score:.1f} ({d:+.1f})")
+
+        client = get_ai_client()
+        if not client:
+            return {"digest": None}
+
+        prompt = (
+            "You are a senior sales intelligence analyst at Iren, an AI infrastructure company. "
+            "Synthesize the signals and score changes below into a 2-3 sentence morning brief for the commercial team. "
+            "Focus on patterns, urgency, and who to prioritize. Be specific about company names. "
+            "Write for infrastructure finance dealmakers. No headers, no bullets — just prose.\n\n"
+            + "\n".join(context_lines)
+        )
+        result = call_with_fallback(client, [{"role": "user", "content": prompt}], max_tokens=200, temperature=0.3)
+
+        if result:
+            brief = ProspectBrief(company_id=None, brief_text=result, brief_type="daily_digest")
+            session.add(brief)
+            session.commit()
+
+        return {"digest": result}
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Briefs
+# ---------------------------------------------------------------------------
+
+class BriefRequest(BaseModel):
+    company_id: int
+
+@app.post("/api/briefs/generate")
+def gen_brief(req: BriefRequest):
+    text = generate_brief(req.company_id)
+    return {"brief": text, "company_id": req.company_id}
+
+@app.post("/api/briefs/email")
+def gen_email(req: BriefRequest):
+    text = generate_outreach_email(req.company_id)
+    return {"email": text, "company_id": req.company_id}
+
+@app.post("/api/briefs/battlecard")
+def gen_battlecard(req: BriefRequest):
+    text = generate_battle_card(req.company_id)
+    return {"battlecard": text, "company_id": req.company_id}
+
+
+# ---------------------------------------------------------------------------
+# Search (AI-powered)
+# ---------------------------------------------------------------------------
+
+class SearchRequest(BaseModel):
+    query: str
+
+@app.post("/api/search")
+def smart_search(req: SearchRequest):
+    session = get_session()
+    try:
+        prospects = session.query(Company).filter(Company.company_type == "prospect").all()
+        score_map = get_latest_scores(session)
+        all_scores = [s.total_score for s in score_map.values() if s.total_score > 0]
+
+        query_lower = req.query.lower()
+        name_matches = [p for p in prospects if query_lower in p.name.lower()]
+        if name_matches:
+            return [
+                {"id": p.id, "name": p.name, "reason": "Name match", "score": score_map.get(p.id, None) and round(score_map[p.id].total_score, 1)}
+                for p in name_matches[:10]
+            ]
+
+        client = get_ai_client()
+        if not client:
+            return []
+
+        company_list = "\n".join(
+            f"- {p.name} (industry: {p.industry}, score: {score_map.get(p.id) and round(score_map[p.id].total_score, 1) or 0})"
+            for p in prospects
+        )
+
+        prompt = (
+            f"The user asked: \"{req.query}\"\n\n"
+            f"Here are all prospects:\n{company_list}\n\n"
+            "Return a JSON array of the top 5 matching prospects. Each item should have: "
+            '{"name": "...", "reason": "short reason why this matches"}. '
+            "Only return the JSON array, nothing else."
+        )
+
+        result = call_with_fallback(client, [{"role": "user", "content": prompt}], max_tokens=300, temperature=0.2)
+
+        if not result:
+            return []
+
+        import json
+        try:
+            clean = result.strip()
+            if clean.startswith("```"):
+                clean = clean.split("\n", 1)[1].rsplit("```", 1)[0]
+            parsed = json.loads(clean)
+        except (json.JSONDecodeError, IndexError):
+            return []
+
+        prospect_map = {p.name.lower(): p for p in prospects}
+        matches = []
+        for item in parsed[:10]:
+            name = item.get("name", "")
+            p = prospect_map.get(name.lower())
+            if p:
+                score = score_map.get(p.id)
+                matches.append({
+                    "id": p.id,
+                    "name": p.name,
+                    "reason": item.get("reason", "AI match"),
+                    "score": round(score.total_score, 1) if score else 0,
+                    "tier": _tier_label(score.total_score if score else 0, all_scores),
+                })
+        return matches
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Admin
+# ---------------------------------------------------------------------------
+
+@app.get("/api/admin/stats")
+def admin_stats():
+    session = get_session()
+    try:
+        return {
+            "companies": session.query(Company).count(),
+            "signals": session.query(Signal).filter(Signal.is_active == True).count(),
+            "scores": session.query(ProspectScore).count(),
+            "briefs": session.query(ProspectBrief).count(),
+            "signal_distribution": {
+                st: session.query(Signal).filter(Signal.signal_type == st, Signal.is_active == True).count()
+                for st in SIGNAL_TYPES if st != "other"
+            },
+            "weights": {
+                st: {"max_points": w["max_points"], "base_points": w["base_points"], "halflife": w["recency_halflife_days"]}
+                for st, w in SIGNAL_WEIGHTS.items()
+            },
+        }
+    finally:
+        session.close()
+
+
+@app.post("/api/admin/seed")
+def seed_db():
+    from database.seed import seed_database
+    seed_database()
+    return {"status": "seeded"}
+
+
+@app.post("/api/admin/rescore")
+def rescore():
+    scores = score_all_prospects()
+    return {"status": "rescored", "count": len(scores)}
