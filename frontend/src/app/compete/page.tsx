@@ -1,33 +1,140 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { SignalBadge } from "@/components/signal-badge"
 import { getCompetitors, generateBattlecard } from "@/lib/api"
-import { formatDate } from "@/lib/utils"
-import type { Competitor } from "@/lib/types"
-import { Building2, MapPin, Users, Swords, Sparkles, Loader2, Globe } from "lucide-react"
+import { cn, formatDate } from "@/lib/utils"
+import type { CompetePageData } from "@/lib/types"
+import {
+  Globe,
+  Swords,
+  Sparkles,
+  Loader2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Activity,
+  LayoutGrid,
+} from "lucide-react"
+
+type SortKey = "capacity_mw" | "gpu_count" | "signal_count_30d" | "name"
+type SortDir = "asc" | "desc"
+
+const SEGMENT_COLORS: Record<string, string> = {
+  "Neocloud": "text-violet-400 bg-violet-400/10 border-violet-400/20",
+  "Hyperscaler": "text-blue-400 bg-blue-400/10 border-blue-400/20",
+  "DC REIT": "text-cyan-400 bg-cyan-400/10 border-cyan-400/20",
+  "Power-First": "text-orange-400 bg-orange-400/10 border-orange-400/20",
+  "International": "text-pink-400 bg-pink-400/10 border-pink-400/20",
+  "Data Center": "text-zinc-400 bg-zinc-400/10 border-zinc-400/20",
+}
+
+function SegmentBadge({ segment }: { segment: string }) {
+  const colors = SEGMENT_COLORS[segment] ?? SEGMENT_COLORS["Data Center"]
+  return (
+    <Badge variant="outline" className={cn("text-[10px] font-semibold tracking-wider border", colors)}>
+      {segment}
+    </Badge>
+  )
+}
+
+function CapacityBar({ mw, maxMw }: { mw: number; maxMw: number }) {
+  const pct = maxMw > 0 ? Math.min(100, (mw / maxMw) * 100) : 0
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+      </div>
+      <span className="tabular-nums">{mw.toLocaleString()}</span>
+    </div>
+  )
+}
+
+function SortIcon({ sortKey, currentKey, dir }: { sortKey: SortKey; currentKey: SortKey; dir: SortDir }) {
+  if (sortKey !== currentKey) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-muted-foreground/50" />
+  return dir === "desc"
+    ? <ArrowDown className="ml-1 inline h-3 w-3 text-primary" />
+    : <ArrowUp className="ml-1 inline h-3 w-3 text-primary" />
+}
 
 export default function CompetePage() {
-  const [competitors, setCompetitors] = useState<Competitor[]>([])
+  const [data, setData] = useState<CompetePageData | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [battlecard, setBattlecard] = useState<string | null>(null)
   const [bcLoading, setBcLoading] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>("capacity_mw")
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [activeSegment, setActiveSegment] = useState<string | null>(null)
 
   useEffect(() => {
     getCompetitors()
-      .then(setCompetitors)
+      .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
-  const selected = competitors.find((c) => c.id === selectedId) || null
+  const competitors = useMemo(() => data?.competitors ?? [], [data?.competitors])
+  const iren = data?.iren ?? null
+
+  const segments = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const c of competitors) {
+      counts[c.segment] = (counts[c.segment] || 0) + 1
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])
+  }, [competitors])
+
+  const maxCapacity = useMemo(() => {
+    const all = [...competitors.map((c) => c.capacity_mw ?? 0)]
+    if (iren?.capacity_mw) all.push(iren.capacity_mw)
+    return Math.max(...all, 1)
+  }, [competitors, iren])
+
+  const irenRank = useMemo(() => {
+    if (!iren?.capacity_mw) return null
+    const withCapacity = competitors.filter((c) => c.capacity_mw != null)
+    const rank = withCapacity.filter((c) => (c.capacity_mw ?? 0) > iren.capacity_mw!).length + 1
+    return { rank, of: withCapacity.length + 1 }
+  }, [competitors, iren])
+
+  const totalSignals30d = useMemo(
+    () => competitors.reduce((sum, c) => sum + c.signal_count_30d, 0),
+    [competitors],
+  )
+
+  const filtered = useMemo(() => {
+    let list = activeSegment ? competitors.filter((c) => c.segment === activeSegment) : competitors
+    list = [...list].sort((a, b) => {
+      const aVal = a[sortKey] ?? (sortKey === "name" ? "" : -1)
+      const bVal = b[sortKey] ?? (sortKey === "name" ? "" : -1)
+      if (sortKey === "name") {
+        return sortDir === "asc"
+          ? String(aVal).localeCompare(String(bVal))
+          : String(bVal).localeCompare(String(aVal))
+      }
+      return sortDir === "desc" ? Number(bVal) - Number(aVal) : Number(aVal) - Number(bVal)
+    })
+    return list
+  }, [competitors, activeSegment, sortKey, sortDir])
+
+  const selected = competitors.find((c) => c.id === selectedId) ?? null
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"))
+    } else {
+      setSortKey(key)
+      setSortDir(key === "name" ? "asc" : "desc")
+    }
+  }
 
   const handleBattlecard = async () => {
     if (!selectedId) return
@@ -45,10 +152,11 @@ export default function CompetePage() {
   if (loading) {
     return (
       <div className="p-6 space-y-6">
-        <Skeleton className="h-8 w-32" />
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-64" />)}
+        <Skeleton className="h-8 w-48" />
+        <div className="grid gap-4 grid-cols-3">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />)}
         </div>
+        <Skeleton className="h-96" />
       </div>
     )
   }
@@ -58,74 +166,226 @@ export default function CompetePage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Compete</h1>
         <p className="text-sm text-muted-foreground">
-          {competitors.length} competitors tracked — market landscape for Iren
+          Competitive landscape — how Iren stacks up
         </p>
       </div>
 
-      {/* Competitor Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {competitors.map((c) => (
-          <Card
-            key={c.id}
-            className="bg-card/50 cursor-pointer transition-all hover:border-primary/30 hover:bg-card/70"
-            onClick={() => { setSelectedId(c.id); setBattlecard(null) }}
-          >
-            <CardHeader className="pb-2">
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-base">{c.name}</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-0.5">{c.industry}</p>
-                </div>
-                {c.is_public && c.ticker && (
-                  <Badge variant="outline" className="text-[10px] font-mono">{c.ticker}</Badge>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {c.description && (
-                <p className="text-xs text-muted-foreground line-clamp-2">{c.description}</p>
-              )}
+      {/* Summary Strip */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+        <Card className="border-border/50 bg-card/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Competitors Tracked
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <span className="text-2xl font-semibold tabular-nums">{competitors.length}</span>
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {segments.map(([seg, count]) => (
+                <span key={seg} className="text-[10px] text-muted-foreground">
+                  {count} {seg}{segments.indexOf([seg, count]) < segments.length - 1 ? "" : ""}
+                </span>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                {c.hq_location && (
-                  <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{c.hq_location}</span>
-                )}
-                {c.employee_count && (
-                  <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" />{c.employee_count.toLocaleString()}</span>
-                )}
-                {c.capacity_mw && (
-                  <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" />{c.capacity_mw} MW</span>
-                )}
-              </div>
-
-              {c.events.length > 0 && (
-                <div className="space-y-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Recent Events</p>
-                  {c.events.slice(0, 2).map((e) => (
-                    <div key={e.id} className="flex items-center gap-2 text-xs">
-                      <Badge variant="outline" className="text-[9px] shrink-0">{e.event_type}</Badge>
-                      <span className="truncate text-muted-foreground">{e.title}</span>
-                    </div>
-                  ))}
+        <Card className="border-border/50 bg-card/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Iren Capacity Rank
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {irenRank ? (
+              <>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-semibold tabular-nums text-[#22c55e]">
+                    #{irenRank.rank}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    of {irenRank.of}
+                  </span>
                 </div>
-              )}
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {iren?.capacity_mw?.toLocaleString()} MW capacity
+                </p>
+              </>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </CardContent>
+        </Card>
 
-              {c.signals.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {c.signals.slice(0, 3).map((s) => (
-                    <SignalBadge key={s.id} type={s.signal_type} />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-        {competitors.length === 0 && (
-          <div className="col-span-full py-12 text-center text-muted-foreground">
-            No competitors tracked yet.
-          </div>
-        )}
+        <Card className="border-border/50 bg-card/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Competitor Activity
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <span className="text-2xl font-semibold tabular-nums">{totalSignals30d}</span>
+            <p className="mt-0.5 text-xs text-muted-foreground">signals in last 30 days</p>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Segment Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant={activeSegment === null ? "default" : "outline"}
+          className="h-7 text-xs"
+          onClick={() => setActiveSegment(null)}
+        >
+          <LayoutGrid className="mr-1 h-3 w-3" /> All
+        </Button>
+        {segments.map(([seg, count]) => (
+          <Button
+            key={seg}
+            size="sm"
+            variant={activeSegment === seg ? "default" : "outline"}
+            className="h-7 text-xs"
+            onClick={() => setActiveSegment(activeSegment === seg ? null : seg)}
+          >
+            {seg}
+            <span className="ml-1 text-muted-foreground">{count}</span>
+          </Button>
+        ))}
+      </div>
+
+      {/* Competitor Table */}
+      <Card className="border-border/50">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead
+                className="cursor-pointer select-none text-xs"
+                onClick={() => toggleSort("name")}
+              >
+                Company <SortIcon sortKey="name" currentKey={sortKey} dir={sortDir} />
+              </TableHead>
+              <TableHead className="text-xs">Segment</TableHead>
+              <TableHead
+                className="cursor-pointer select-none text-xs text-right"
+                onClick={() => toggleSort("capacity_mw")}
+              >
+                Capacity (MW) <SortIcon sortKey="capacity_mw" currentKey={sortKey} dir={sortDir} />
+              </TableHead>
+              <TableHead
+                className="cursor-pointer select-none text-xs text-right"
+                onClick={() => toggleSort("gpu_count")}
+              >
+                GPUs <SortIcon sortKey="gpu_count" currentKey={sortKey} dir={sortDir} />
+              </TableHead>
+              <TableHead
+                className="cursor-pointer select-none text-xs text-right"
+                onClick={() => toggleSort("signal_count_30d")}
+              >
+                Signals (30d) <SortIcon sortKey="signal_count_30d" currentKey={sortKey} dir={sortDir} />
+              </TableHead>
+              <TableHead className="text-xs">Latest Signal</TableHead>
+              <TableHead className="text-xs">Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {/* Iren benchmark row — always pinned at top */}
+            {iren && (
+              <TableRow className="border-[#22c55e]/20 bg-[#22c55e]/[0.04] hover:bg-[#22c55e]/[0.07]">
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-[#22c55e]">{iren.name}</span>
+                    <Badge variant="outline" className="text-[10px] font-mono border-[#22c55e]/30 text-[#22c55e]">
+                      {iren.ticker}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">{iren.hq_location}</p>
+                </TableCell>
+                <TableCell><SegmentBadge segment={iren.segment} /></TableCell>
+                <TableCell className="text-right">
+                  {iren.capacity_mw ? (
+                    <CapacityBar mw={iren.capacity_mw} maxMw={maxCapacity} />
+                  ) : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-muted-foreground">
+                  {iren.gpu_count ? iren.gpu_count.toLocaleString() : "—"}
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground">—</TableCell>
+                <TableCell className="text-muted-foreground">—</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="text-[10px] text-[#22c55e] border-[#22c55e]/30">
+                    YOU
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            )}
+
+            {/* Competitor rows */}
+            {filtered.map((c) => {
+              const latestSignal = c.signals[0] ?? null
+              return (
+                <TableRow
+                  key={c.id}
+                  className="cursor-pointer"
+                  onClick={() => { setSelectedId(c.id); setBattlecard(null) }}
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{c.name}</span>
+                      {c.is_public && c.ticker && (
+                        <Badge variant="outline" className="text-[10px] font-mono">{c.ticker}</Badge>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{c.hq_location}</p>
+                  </TableCell>
+                  <TableCell><SegmentBadge segment={c.segment} /></TableCell>
+                  <TableCell className="text-right">
+                    {c.capacity_mw ? (
+                      <CapacityBar mw={c.capacity_mw} maxMw={maxCapacity} />
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {c.gpu_count ? c.gpu_count.toLocaleString() : "—"}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {c.signal_count_30d > 0 ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Activity className="h-3 w-3 text-[#22c55e]" />
+                        {c.signal_count_30d}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">0</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {latestSignal ? (
+                      <div className="flex items-center gap-1.5 max-w-[200px]">
+                        <SignalBadge type={latestSignal.signal_type} />
+                        <span className="text-xs text-muted-foreground truncate">{latestSignal.title}</span>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-[10px]">
+                      {c.is_public ? "Public" : "Private"}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+
+            {filtered.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
+                  No competitors match this filter.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </Card>
 
       {/* Detail Sheet */}
       <Sheet open={selectedId !== null} onOpenChange={(open) => { if (!open) setSelectedId(null) }}>
@@ -138,7 +398,7 @@ export default function CompetePage() {
                   {selected.name}
                 </SheetTitle>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>{selected.industry}</span>
+                  <SegmentBadge segment={selected.segment} />
                   {selected.hq_location && <><span>·</span><span>{selected.hq_location}</span></>}
                   {selected.website && (
                     <>
@@ -166,7 +426,7 @@ export default function CompetePage() {
                   {selected.capacity_mw && (
                     <div className="rounded-md border border-border/30 px-3 py-2">
                       <p className="text-[10px] text-muted-foreground">Capacity</p>
-                      <p className="text-sm font-medium tabular-nums">{selected.capacity_mw} MW</p>
+                      <p className="text-sm font-medium tabular-nums">{selected.capacity_mw.toLocaleString()} MW</p>
                     </div>
                   )}
                   {selected.gpu_count && (
@@ -181,6 +441,10 @@ export default function CompetePage() {
                       <p className="text-sm font-mono font-medium">{selected.ticker}</p>
                     </div>
                   )}
+                  <div className="rounded-md border border-border/30 px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground">Signals (30d)</p>
+                    <p className="text-sm font-medium tabular-nums">{selected.signal_count_30d}</p>
+                  </div>
                 </div>
 
                 <Separator />

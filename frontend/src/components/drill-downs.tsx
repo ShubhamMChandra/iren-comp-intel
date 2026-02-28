@@ -101,13 +101,39 @@ export function SignalBreakdownDetail({ breakdown }: { breakdown: Record<string,
 
 // --- Score Breakdown ---
 
+function scoreInterpretation(breakdown: ScoreBreakdown, total: number): string {
+  const active = Object.entries(breakdown)
+    .filter(([k, v]) => k in SCORE_CAPS && v > 0)
+    .sort((a, b) => b[1] - a[1])
+
+  if (active.length === 0) return "No signal activity detected yet."
+
+  const topNames = active
+    .slice(0, 2)
+    .map(([k]) => CATEGORY_LABELS[k]?.toLowerCase() ?? k)
+
+  const strength =
+    total >= 70 ? "Very strong" :
+    total >= 45 ? "Strong" :
+    total >= 25 ? "Moderate" :
+    "Early"
+
+  const drivers = topNames.join(" and ")
+  const breadth =
+    active.length >= 4 ? " across multiple categories" :
+    active.length >= 2 ? "" :
+    " in a single category"
+
+  return `${strength} ${drivers} signal activity${breadth}.`
+}
+
 export function ScoreBreakdownDetail({ breakdown, total }: { breakdown: ScoreBreakdown; total: number }) {
   const entries = Object.entries(breakdown).filter(([k]) => k in SCORE_CAPS)
 
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">
-        Score = sum of 6 signal categories, each with a cap. Recent signals from credible sources score higher.
+        {scoreInterpretation(breakdown, total)}
       </p>
       <div className="space-y-1.5">
         {entries.map(([cat, val]) => {

@@ -2,7 +2,7 @@
 # Deps: OpenRouter via ai.client
 # How: LLM prompt with extractive keyword fallback
 
-from ai.client import get_ai_client, call_with_fallback
+from ai.client import call_bulk, get_ai_client
 
 SYSTEM_PROMPT = """You are a sales intelligence analyst for Iren, a high-performance computing 
 data center company that sells GPU cloud, colocation, and build-to-suit data center capacity.
@@ -24,7 +24,7 @@ def summarize_article(title: str, content: str, company_name: str = "") -> str:
 
     user_prompt = f"Company: {company_name}\nTitle: {title}\n\nContent:\n{content[:3000]}"
 
-    result = call_with_fallback(
+    result = call_bulk(
         client,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},

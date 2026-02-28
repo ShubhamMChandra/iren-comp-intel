@@ -1,9 +1,15 @@
+# Why: Backfill embeddings for signals and companies
+# Deps: Ollama, embeddings module, database models
+# How: Batch embed via get_embeddings_batch, commit per batch
+
 """
-Backfill embeddings for all existing signals that don't have one.
+Backfill embeddings for signals and companies.
 
 Usage:
-    python -m ai.embed_backfill           # embed all signals missing embeddings
-    python -m ai.embed_backfill --force   # re-embed everything (overwrites existing)
+    python -m ai.embed_backfill              # embed all signals missing embeddings
+    python -m ai.embed_backfill --force      # re-embed all signals
+    python -m ai.embed_backfill --companies # embed all companies missing embeddings
+    python -m ai.embed_backfill --companies --force  # re-embed all companies
 """
 
 import sys
@@ -11,7 +17,7 @@ import time
 
 from ai.embeddings import get_embeddings_batch, serialize_embedding, _check_ollama
 from database.db import get_session, init_db
-from database.models import Signal
+from database.models import Company, Signal
 
 BATCH_SIZE = 50
 
@@ -67,6 +73,60 @@ def backfill_embeddings(force: bool = False):
         session.close()
 
 
+def backfill_company_embeddings(force: bool = False):
+    init_db()
+
+    if not _check_ollama():
+        print("Ollama is not running. Start it with: ollama serve")
+        print("Then pull the model: ollama pull nomic-embed-text")
+        return
+
+    session = get_session()
+    try:
+        query = session.query(Company)
+        if not force:
+            query = query.filter(Company.embedding.is_(None))
+
+        companies = query.all()
+        total = len(companies)
+
+        if total == 0:
+            print("All companies already have embeddings.")
+            return
+
+        print(f"Embedding {total} companies in batches of {BATCH_SIZE}...")
+
+        embedded = 0
+        failed = 0
+
+        for i in range(0, total, BATCH_SIZE):
+            batch = companies[i:i + BATCH_SIZE]
+            texts = [f"{c.name}: {c.description or c.industry}" for c in batch]
+
+            embeddings = get_embeddings_batch(texts)
+
+            for company, emb in zip(batch, embeddings):
+                if emb is not None:
+                    company.embedding = serialize_embedding(emb)
+                    embedded += 1
+                else:
+                    failed += 1
+
+            session.commit()
+
+            progress = min(i + BATCH_SIZE, total)
+            print(f"  {progress}/{total} processed ({embedded} embedded, {failed} failed)")
+
+            time.sleep(0.1)
+
+        print(f"\nDone. {embedded} companies embedded, {failed} failed.")
+    finally:
+        session.close()
+
+
 if __name__ == "__main__":
     force = "--force" in sys.argv
-    backfill_embeddings(force=force)
+    if "--companies" in sys.argv:
+        backfill_company_embeddings(force=force)
+    else:
+        backfill_embeddings(force=force)

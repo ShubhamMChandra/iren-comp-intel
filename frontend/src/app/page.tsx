@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { getDashboard, getDashboardDigest } from "@/lib/api"
-import type { DashboardData } from "@/lib/types"
+import { getDashboard, getDashboardDigest, getSignals } from "@/lib/api"
+import type { DashboardData, Signal } from "@/lib/types"
 import { cn, TIER_COLORS } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -15,6 +15,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { DeltaValue } from "@/components/delta-value"
 import { SignalBadge } from "@/components/signal-badge"
+import { ProductBadge } from "@/components/product-badge"
 import { DrillDown } from "@/components/drill-down"
 import {
   PipelineHeatDetail,
@@ -32,6 +33,8 @@ import {
   ArrowRight,
   Trophy,
   AlertTriangle,
+  DollarSign,
+  ExternalLink,
 } from "lucide-react"
 
 function DashboardSkeleton() {
@@ -53,6 +56,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [digest, setDigest] = useState<string | null>(null)
   const [digestLoading, setDigestLoading] = useState(true)
+  const [fundingSignals, setFundingSignals] = useState<Signal[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -68,6 +72,19 @@ export default function DashboardPage() {
       .then((r) => { if (!cancelled) setDigest(r.digest) })
       .catch(() => {})
       .finally(() => { if (!cancelled) setDigestLoading(false) })
+
+    Promise.all([
+      getSignals({ signal_type: "fundraising", days: 30, limit: 10 }),
+      getSignals({ signal_type: "funding_completed", days: 30, limit: 10 }),
+    ])
+      .then(([raising, completed]) => {
+        if (cancelled) return
+        const merged = [...raising, ...completed]
+          .sort((a, b) => (b.detected_at ?? "").localeCompare(a.detected_at ?? ""))
+          .slice(0, 8)
+        setFundingSignals(merged)
+      })
+      .catch(() => {})
 
     return () => { cancelled = true }
   }, [])
@@ -241,68 +258,92 @@ export default function DashboardPage() {
                       <th className="pb-2 pr-4 text-xs font-medium">Company</th>
                       <th className="pb-2 pr-4 text-xs font-medium">Score</th>
                       <th className="pb-2 pr-4 text-xs font-medium">Change</th>
-                      <th className="pb-2 pr-4 text-xs font-medium hidden md:table-cell">Why</th>
+                      <th className="pb-2 pr-4 text-xs font-medium hidden md:table-cell">Why Now</th>
                       <th className="pb-2 text-xs font-medium"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {call_list.map((p) => (
-                      <tr key={p.id} className="border-b border-border/30 last:border-0">
-                        <td className="py-2.5 pr-4">
-                          <span className="font-medium">{p.name}</span>
-                          <p className="text-xs text-muted-foreground">{p.industry}</p>
-                        </td>
-                        <td className="py-2.5 pr-4">
-                          <div className="flex items-center gap-2">
-                            <DrillDown
-                              title="Score Breakdown"
-                              content={<ScoreBreakdownDetail breakdown={p.score_breakdown} total={p.score} />}
-                            >
-                              <span className="tabular-nums">{p.score.toFixed(1)}</span>
-                            </DrillDown>
-                            <DrillDown
-                              title="Tier Definition"
-                              content={<TierExplainer activeTier={p.tier} />}
-                            >
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-[10px] font-semibold tracking-wider border",
-                                  TIER_COLORS[p.tier] ?? "text-zinc-400 bg-zinc-400/10 border-zinc-400/20"
-                                )}
-                              >
-                                {p.tier}
-                              </Badge>
-                            </DrillDown>
-                          </div>
-                        </td>
-                        <td className="py-2.5 pr-4">
-                          <DrillDown
-                            title="Score Change"
-                            content={<DeltaExplainer score={p.score} delta={p.delta} />}
-                          >
-                            <DeltaValue delta={p.delta} />
-                          </DrillDown>
-                        </td>
-                        <td className="py-2.5 pr-4 hidden md:table-cell">
-                          {p.headline ? (
-                            <p className="text-xs text-muted-foreground line-clamp-1 max-w-xs">{p.headline}</p>
-                          ) : p.top_signal_type ? (
-                            <SignalBadge type={p.top_signal_type} />
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
+                    {call_list.map((p) => {
+                      const soWhat = p.action_insight?.split(" → ")[0] ?? null
+                      return (
+                        <tr
+                          key={p.id}
+                          className={cn(
+                            "border-b border-border/30 last:border-0 transition-colors hover:bg-muted/20",
+                            p.urgency === "URGENT" && "border-l-2 border-l-red-400",
+                            p.urgency === "HIGH" && "border-l-2 border-l-orange-400",
+                            p.urgency === "MEDIUM" && "border-l-2 border-l-amber-400/50",
                           )}
-                        </td>
-                        <td className="py-2.5">
-                          <Link
-                            href={`/prospects?id=${p.id}`}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-[#22c55e] hover:underline"
-                          >
-                            Prep <ArrowRight className="h-3 w-3" />
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
+                        >
+                          <td className="py-2.5 pr-4">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{p.name}</span>
+                              <ProductBadge productFit={p.product_fit} />
+                            </div>
+                            <p className="text-xs text-muted-foreground">{p.industry}</p>
+                          </td>
+                          <td className="py-2.5 pr-4">
+                            <div className="flex items-center gap-2">
+                              <DrillDown
+                                title="Score Breakdown"
+                                content={<ScoreBreakdownDetail breakdown={p.score_breakdown} total={p.score} />}
+                              >
+                                <span className="tabular-nums">{p.score.toFixed(1)}</span>
+                              </DrillDown>
+                              <DrillDown
+                                title="Tier Definition"
+                                content={<TierExplainer activeTier={p.tier} />}
+                              >
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[10px] font-semibold tracking-wider border",
+                                    TIER_COLORS[p.tier] ?? "text-zinc-400 bg-zinc-400/10 border-zinc-400/20"
+                                  )}
+                                >
+                                  {p.tier}
+                                </Badge>
+                              </DrillDown>
+                            </div>
+                          </td>
+                          <td className="py-2.5 pr-4">
+                            <DrillDown
+                              title="Score Change"
+                              content={<DeltaExplainer score={p.score} delta={p.delta} />}
+                            >
+                              <DeltaValue delta={p.delta} />
+                            </DrillDown>
+                          </td>
+                          <td className="py-2.5 pr-4 hidden md:table-cell max-w-xs">
+                            {soWhat ? (
+                              <div>
+                                {p.urgency && p.urgency !== "LOW" && (
+                                  <span className={cn(
+                                    "text-[10px] font-bold mr-1.5",
+                                    p.urgency === "URGENT" ? "text-red-400" : p.urgency === "HIGH" ? "text-orange-400" : "text-amber-400"
+                                  )}>
+                                    {p.urgency}
+                                  </span>
+                                )}
+                                <span className="text-xs text-muted-foreground line-clamp-2">{soWhat}</span>
+                              </div>
+                            ) : p.headline ? (
+                              <span className="text-xs text-muted-foreground line-clamp-2">{p.headline}</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5">
+                            <Link
+                              href={`/prospects?id=${p.id}`}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-[#22c55e] hover:underline"
+                            >
+                              Prep <ArrowRight className="h-3 w-3" />
+                            </Link>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -331,7 +372,7 @@ export default function DashboardPage() {
                   {cooling.map((p) => (
                     <div
                       key={p.id}
-                      className="flex items-center justify-between rounded-md border border-border/30 px-3 py-2"
+                      className="flex items-center justify-between rounded-md border border-border/30 px-3 py-2 transition-colors hover:border-border/60 hover:bg-muted/20"
                     >
                       <Link href={`/prospects?id=${p.id}`} className="hover:text-[#22c55e]">
                         <span className="text-sm font-medium">{p.name}</span>
@@ -352,6 +393,52 @@ export default function DashboardPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Funding Tracker */}
+          {fundingSignals.length > 0 && (
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-emerald-400" />
+                  <CardTitle className="text-sm font-medium">Funding Tracker</CardTitle>
+                </div>
+                <p className="text-xs text-muted-foreground">Fundraising & closes — last 30 days</p>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {fundingSignals.map((s) => (
+                    <div key={s.id} className="rounded-md border border-border/30 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold truncate">{s.company_name || "Unknown"}</span>
+                        <SignalBadge type={s.signal_type} />
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{s.title}</p>
+                      {s.action_insight && (
+                        <p className="mt-0.5 text-[11px] text-muted-foreground/50 line-clamp-1">
+                          {s.action_insight.split(" → ")[0]}
+                        </p>
+                      )}
+                      <div className="mt-1 flex items-center justify-between">
+                        <span className="text-[11px] text-muted-foreground/60">
+                          {s.detected_at ? new Date(s.detected_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
+                        </span>
+                        {s.source_url && (
+                          <a
+                            href={s.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground/60 hover:text-[#22c55e]"
+                          >
+                            Source <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Competitor Alerts */}
           {alerts.length > 0 && (
@@ -408,7 +495,7 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {top_ranked.map((p, i) => (
-                  <tr key={p.id} className="border-b border-border/30 last:border-0">
+                  <tr key={p.id} className="border-b border-border/30 last:border-0 transition-colors hover:bg-muted/20">
                     <td className="py-2 pr-4 tabular-nums text-muted-foreground">{i + 1}</td>
                     <td className="py-2 pr-4">
                       <Link href={`/prospects?id=${p.id}`} className="font-medium hover:text-[#22c55e]">
@@ -418,7 +505,7 @@ export default function DashboardPage() {
                     <td className="py-2 pr-4">
                       <div className="flex items-center gap-2">
                         <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
-                          <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, p.score)}%` }} />
+                          <div className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out" style={{ width: `${Math.min(100, p.score)}%` }} />
                         </div>
                         <DrillDown
                           title="Score Breakdown"

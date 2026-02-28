@@ -37,14 +37,27 @@ class Company(Base):
     ticker = Column(String(20), nullable=True)
     sec_cik = Column(String(20), nullable=True)
 
+    # Product segmentation: "ai_cloud", "colocation", "build_to_suit"
+    product_fit = Column(String(50), nullable=True)
+
+    ats_board = Column(String(255), nullable=True)  # "greenhouse:slug" or "lever:slug"
+    github_org = Column(String(255), nullable=True)  # GitHub organization name
+    arxiv_org = Column(String(255), nullable=True)  # ArXiv author affiliation search term
+
     # Competitor-specific fields (null for prospects)
     capacity_mw = Column(Float, nullable=True)
     gpu_count = Column(Integer, nullable=True)
-    known_pricing = Column(Text, nullable=True)
+    known_pricing = Column(Text, nullable=True)  # also used for pricing intel
+    key_customers = Column(Text, nullable=True)  # JSON list: '["Microsoft", "OpenAI"]'
+    strengths = Column(Text, nullable=True)  # JSON list
+    weaknesses = Column(Text, nullable=True)  # JSON list
+    threat_level = Column(String(20), nullable=True)  # "high", "medium", "low"
 
     last_funding_amount = Column(Float, nullable=True)
     last_funding_date = Column(DateTime, nullable=True)
     total_funding = Column(Float, nullable=True)
+
+    embedding = Column(Text, nullable=True)  # JSON-serialized float list for semantic search
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
@@ -57,6 +70,7 @@ class Company(Base):
     scores = relationship("ProspectScore", back_populates="company", cascade="all, delete-orphan")
     briefs = relationship("ProspectBrief", back_populates="company", cascade="all, delete-orphan")
     competitor_events = relationship("CompetitorEvent", back_populates="company", cascade="all, delete-orphan")
+    contacts = relationship("Contact", back_populates="company", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Company {self.name} ({self.company_type})>"
@@ -76,6 +90,8 @@ class Signal(Base):
     is_active = Column(Boolean, default=True)
     raw_data = Column(Text, nullable=True)
     embedding = Column(Text, nullable=True)
+    action_window = Column(String(500), nullable=True)
+    action_insight = Column(Text, nullable=True)
     detected_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     company = relationship("Company", back_populates="signals")
@@ -136,3 +152,23 @@ class CompetitorEvent(Base):
 
     def __repr__(self):
         return f"<CompetitorEvent {self.event_type}: {self.title[:50]}>"
+
+
+class Contact(Base):
+    __tablename__ = "contacts"
+
+    id = Column(Integer, primary_key=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    title = Column(String(255), nullable=False)
+    role_type = Column(String(50), nullable=False)  # "technical", "economic", "champion", "procurement"
+    seniority = Column(String(50), default="")  # "vp", "director", "c_suite"
+    recommended_approach = Column(Text, default="")
+    name = Column(String(255), default="")
+    email = Column(String(255), nullable=True)
+    linkedin_url = Column(String(500), nullable=True)
+    last_contacted = Column(DateTime, nullable=True)
+
+    company = relationship("Company", back_populates="contacts")
+
+    def __repr__(self):
+        return f"<Contact {self.name} — {self.title}>"

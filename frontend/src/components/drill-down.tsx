@@ -22,8 +22,9 @@ export function DrillDown({ children, content, title, className, align = "center
       <PopoverTrigger asChild>
         <button
           type="button"
+          onClick={(e) => e.stopPropagation()}
           className={cn(
-            "cursor-pointer decoration-dashed underline-offset-4 hover:underline decoration-muted-foreground/40 transition-colors inline-flex items-baseline",
+            "cursor-pointer decoration-dashed underline-offset-4 hover:underline hover:text-foreground decoration-muted-foreground/40 transition-colors inline-flex items-baseline",
             className,
           )}
         >

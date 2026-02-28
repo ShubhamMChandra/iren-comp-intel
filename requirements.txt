@@ -7,3 +7,4 @@ openai>=1.50
 python-dateutil>=2.9
 lxml>=5.0
 pytest>=8.0
+duckduckgo-search>=6.0

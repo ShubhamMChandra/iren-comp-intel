@@ -19,3 +19,4 @@ Sales intelligence tool for Iren's commercial team. Scores prospect companies (A
 - Prefer small, targeted changes over rewrites.
 - Always run tests (`python -m pytest tests/ -v`) after code changes.
 - Detailed rules live in `.cursor/rules/` — check there for session management patterns, testing conventions, page structure, and multi-file task checklists.
+- Machine-readable context (module map, API surface, task checklists) lives in `internal/llm-context.yaml`; regenerate with `python scripts/generate_llm_context.py`.

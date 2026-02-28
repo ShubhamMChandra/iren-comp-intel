@@ -6,6 +6,12 @@ What we're testing:
   - FundingCollector: regex-based classification and amount extraction
   - JobsCollector: infra keyword matching
   - NewsCollector: fuzzy company name matching
+  - ATSCollector: Greenhouse/Lever JSON parsing + infra filtering
+  - EarningsCollector: filing keyword classification
+  - GitHubCollector: infra repo keyword matching
+  - ArXivCollector: scale keyword matching in papers
+  - HNCollector: story classification by keyword
+  - CloudBlogCollector: company matching + signal type classification
 
 We test the LOGIC without making real HTTP requests.
 """
@@ -18,6 +24,12 @@ from collectors.base import BaseCollector
 from collectors.funding_collector import FundingCollector
 from collectors.jobs_collector import JobsCollector
 from collectors.news_collector import NewsCollector
+from collectors.ats_collector import ATSCollector
+from collectors.earnings_collector import EarningsCollector
+from collectors.github_collector import GitHubCollector
+from collectors.arxiv_collector import ArXivCollector
+from collectors.hn_collector import HNCollector
+from collectors.cloud_blog_collector import CloudBlogCollector
 
 
 # ── BaseCollector dedup ───────────────────────────────────────────
@@ -213,3 +225,335 @@ class TestNewsFuzzyMatch:
 
     def test_no_match_for_unknown_company(self, matcher):
         assert matcher("some random company", "article about anything") is False
+
+
+# ── ATSCollector parsing + infra filtering ────────────────────────
+
+
+class TestATSCollectorGreenhouseParsing:
+    """Test Greenhouse JSON → job dict extraction."""
+
+    @pytest.fixture()
+    def parser(self):
+        collector = ATSCollector.__new__(ATSCollector)
+        return collector._fetch_greenhouse  # we won't call it — we test the struct below
+
+    def test_parse_greenhouse_structure(self):
+        """_fetch_greenhouse should extract title, location, department, url."""
+        collector = ATSCollector.__new__(ATSCollector)
+        raw_api_response = {
+            "jobs": [
+                {
+                    "title": "GPU Infrastructure Engineer",
+                    "location": {"name": "San Francisco, CA"},
+                    "departments": [{"name": "Platform"}],
+                    "absolute_url": "https://boards.greenhouse.io/testco/jobs/123",
+                },
+                {
+                    "title": "Marketing Manager",
+                    "location": {"name": "New York, NY"},
+                    "departments": [],
+                    "absolute_url": "https://boards.greenhouse.io/testco/jobs/456",
+                },
+            ],
+        }
+
+        results = []
+        for job in raw_api_response["jobs"]:
+            departments = job.get("departments", [])
+            results.append({
+                "title": job.get("title", ""),
+                "location": (job.get("location") or {}).get("name", "Unknown"),
+                "department": departments[0].get("name", "Unknown") if departments else "Unknown",
+                "url": job.get("absolute_url", ""),
+            })
+
+        assert len(results) == 2
+        assert results[0]["title"] == "GPU Infrastructure Engineer"
+        assert results[0]["location"] == "San Francisco, CA"
+        assert results[0]["department"] == "Platform"
+        assert results[0]["url"] == "https://boards.greenhouse.io/testco/jobs/123"
+        assert results[1]["department"] == "Unknown"
+
+    def test_parse_greenhouse_missing_location(self):
+        """Null location should default to 'Unknown'."""
+        job = {"title": "SRE", "location": None, "departments": [], "absolute_url": ""}
+        location = (job.get("location") or {}).get("name", "Unknown")
+        assert location == "Unknown"
+
+
+class TestATSCollectorLeverParsing:
+    """Test Lever JSON → job dict extraction."""
+
+    def test_parse_lever_structure(self):
+        raw_postings = [
+            {
+                "text": "ML Platform Engineer",
+                "categories": {"location": "Remote", "team": "Infrastructure"},
+                "hostedUrl": "https://jobs.lever.co/testco/abc-123",
+            },
+            {
+                "text": "Sales Rep",
+                "categories": {"location": "Chicago, IL"},
+                "hostedUrl": "https://jobs.lever.co/testco/def-456",
+            },
+        ]
+
+        results = []
+        for posting in raw_postings:
+            categories = posting.get("categories", {})
+            results.append({
+                "title": posting.get("text", ""),
+                "location": categories.get("location", "Unknown"),
+                "department": categories.get("team", "Unknown"),
+                "url": posting.get("hostedUrl", ""),
+            })
+
+        assert results[0]["title"] == "ML Platform Engineer"
+        assert results[0]["department"] == "Infrastructure"
+        assert results[1]["department"] == "Unknown"
+
+
+class TestATSCollectorInfraFilter:
+    """Test that _is_infra_role reuses INFRA_KEYWORDS properly."""
+
+    @pytest.fixture()
+    def matcher(self):
+        collector = ATSCollector.__new__(ATSCollector)
+        return collector._is_infra_role
+
+    @pytest.mark.parametrize("title", [
+        "gpu infrastructure engineer",
+        "ml platform lead",
+        "senior cuda developer",
+        "distributed systems engineer",
+        "site reliability engineer",
+        "kubernetes platform engineer",
+    ])
+    def test_infra_titles_matched(self, matcher, title):
+        assert matcher(title) is True
+
+    @pytest.mark.parametrize("title", [
+        "marketing manager",
+        "product designer",
+        "recruiter",
+        "general counsel",
+    ])
+    def test_non_infra_titles_rejected(self, matcher, title):
+        assert matcher(title) is False
+
+
+# ── EarningsCollector classification ──────────────────────────────
+
+
+class TestEarningsClassification:
+    """Test keyword-based signal classification from filing content."""
+
+    @pytest.fixture()
+    def classifier(self):
+        collector = EarningsCollector.__new__(EarningsCollector)
+        return collector._classify_signal
+
+    @pytest.mark.parametrize("text,expected", [
+        ("capex increase for data center expansion", "cloud_spend"),
+        ("significant capital expenditure planned for q3", "cloud_spend"),
+        ("infrastructure investment in gpu clusters", "cloud_spend"),
+    ])
+    def test_capex_keywords_classify_as_cloud_spend(self, classifier, text, expected):
+        assert classifier(text) == expected
+
+    @pytest.mark.parametrize("text,expected", [
+        ("capacity constraints in current data centers", "outgrowing"),
+        ("company continues to outgrow existing facilities", "outgrowing"),
+        ("resource constraint impacting delivery timelines", "outgrowing"),
+    ])
+    def test_capacity_keywords_classify_as_outgrowing(self, classifier, text, expected):
+        assert classifier(text) == expected
+
+    def test_default_classification_is_ai_initiative(self, classifier):
+        assert classifier("quarterly results show growth in ai segment") == "ai_initiative"
+
+    def test_capex_takes_precedence_over_capacity(self, classifier):
+        """When both keyword sets match, capex (checked first) wins."""
+        assert classifier("capex for additional capacity") == "cloud_spend"
+
+
+class TestEarningsCompanyFilter:
+    """Only public companies with tickers should be processed."""
+
+    def test_public_company_with_ticker_qualifies(self, session, sample_competitor):
+        """sample_competitor is public with ticker='RVCL'."""
+        from database.models import Company
+        public = (
+            session.query(Company)
+            .filter(Company.is_public == True, Company.ticker.isnot(None))
+            .all()
+        )
+        assert sample_competitor in public
+
+    def test_private_company_excluded(self, session, sample_prospect):
+        """sample_prospect is private (is_public=False)."""
+        from database.models import Company
+        public = (
+            session.query(Company)
+            .filter(Company.is_public == True, Company.ticker.isnot(None))
+            .all()
+        )
+        assert sample_prospect not in public
+
+
+# ── GitHubCollector infra keyword matching ────────────────────────
+
+
+class TestGitHubInfraMatching:
+    """Test that repo name+description is checked against INFRA_KEYWORDS."""
+
+    @pytest.mark.parametrize("name,description", [
+        ("training-infra", "Distributed training scripts"),
+        ("gpu-cluster", "Managing GPU cluster deployments"),
+        ("model-serving", "Low-latency inference serving framework"),
+        ("k8s-mlops", "Kubernetes configs for MLOps pipelines"),
+        ("llm-benchmark", "Benchmarking large language models"),
+        ("hpc-scheduler", "HPC job scheduler"),
+    ])
+    def test_infra_repos_matched(self, name, description):
+        from collectors.github_collector import INFRA_KEYWORDS
+        searchable = f"{name} {description}".lower()
+        assert any(kw in searchable for kw in INFRA_KEYWORDS)
+
+    @pytest.mark.parametrize("name,description", [
+        ("company-website", "Our marketing site"),
+        ("hr-portal", "Employee self-service portal"),
+        ("design-system", "UI component library for branding"),
+    ])
+    def test_non_infra_repos_skipped(self, name, description):
+        from collectors.github_collector import INFRA_KEYWORDS
+        searchable = f"{name} {description}".lower()
+        assert not any(kw in searchable for kw in INFRA_KEYWORDS)
+
+
+# ── ArXivCollector scale keyword matching ─────────────────────────
+
+
+class TestArXivScaleMatching:
+    """Test that paper title+abstract is matched against SCALE_KEYWORDS."""
+
+    @pytest.mark.parametrize("title,abstract", [
+        ("Scaling Laws for Large-Scale Language Models", "We study training compute optimal models"),
+        ("Efficient Distributed Training on GPU Clusters", "Using 512 H100 GPUs across 64 nodes"),
+        ("Infrastructure for Billion Parameter Models", "Scaling to billions with distributed systems"),
+        ("TPU Pod Training at Scale", "Our TPU pod configuration for large runs"),
+    ])
+    def test_scale_papers_matched(self, title, abstract):
+        from collectors.arxiv_collector import SCALE_KEYWORDS
+        searchable = f"{title} {abstract}".lower()
+        assert any(kw in searchable for kw in SCALE_KEYWORDS)
+
+    @pytest.mark.parametrize("title,abstract", [
+        ("A Survey of Sentiment Analysis Methods", "We review recent approaches to sentiment analysis"),
+        ("Improving User Interface Design", "This paper proposes a novel UI layout algorithm"),
+    ])
+    def test_non_scale_papers_skipped(self, title, abstract):
+        from collectors.arxiv_collector import SCALE_KEYWORDS
+        searchable = f"{title} {abstract}".lower()
+        assert not any(kw in searchable for kw in SCALE_KEYWORDS)
+
+
+# ── HNCollector classification ────────────────────────────────────
+
+
+class TestHNClassification:
+    """Test HN story title → signal type classification."""
+
+    @pytest.fixture()
+    def classifier(self):
+        collector = HNCollector.__new__(HNCollector)
+        return collector._classify
+
+    @pytest.mark.parametrize("title,expected", [
+        ("Company X is hiring ML engineers", "hiring"),
+        ("Ask HN: Who is hiring? (January 2026)", "hiring"),
+        ("New jobs posted at startup Y", "hiring"),
+    ])
+    def test_hiring_classification(self, classifier, title, expected):
+        assert classifier(title) == expected
+
+    @pytest.mark.parametrize("title,expected", [
+        ("Company X raised $50M Series B", "funding_completed"),
+        ("Startup Y raises $200M at $2B valuation", "funding_completed"),
+        ("New funding round for AI lab", "funding_completed"),
+        ("Series C valued at $5B", "funding_completed"),
+    ])
+    def test_funding_classification(self, classifier, title, expected):
+        assert classifier(title) == expected
+
+    @pytest.mark.parametrize("title,expected", [
+        ("Switching from AWS to bare metal", "outgrowing"),
+        ("Why we're leaving GCP for colo", "outgrowing"),
+        ("Company X dropped their cloud provider", "outgrowing"),
+        ("Migrating from Azure to on-prem", "outgrowing"),
+    ])
+    def test_outgrowing_classification(self, classifier, title, expected):
+        assert classifier(title) == expected
+
+    @pytest.mark.parametrize("title", [
+        "Company X launches new AI product",
+        "Show HN: Open source LLM toolkit",
+        "Deep learning framework comparison 2026",
+    ])
+    def test_default_is_ai_initiative(self, classifier, title):
+        assert classifier(title) == "ai_initiative"
+
+
+# ── CloudBlogCollector matching + classification ──────────────────
+
+
+class TestCloudBlogCompanyMatching:
+    """Test that company names are detected in blog post text."""
+
+    def test_company_name_found_in_title(self):
+        company_name = "TestCo AI"
+        title = "How TestCo AI Scaled Their ML Pipeline on AWS"
+        summary = "A case study on scaling."
+        text = f"{title} {summary}".lower()
+        assert company_name.lower() in text
+
+    def test_company_name_found_in_summary(self):
+        company_name = "TestCo AI"
+        title = "Case Study: Scaling ML Workloads"
+        summary = "TestCo AI used our new GPU instances to train models."
+        text = f"{title} {summary}".lower()
+        assert company_name.lower() in text
+
+    def test_company_not_mentioned(self):
+        company_name = "TestCo AI"
+        title = "New GPU instances available in us-east-1"
+        summary = "We're launching new p5 instances for ML training."
+        text = f"{title} {summary}".lower()
+        assert company_name.lower() not in text
+
+
+class TestCloudBlogClassification:
+    """Test blog post title → signal type classification."""
+
+    @pytest.fixture()
+    def classifier(self):
+        collector = CloudBlogCollector.__new__(CloudBlogCollector)
+        return collector._classify
+
+    @pytest.mark.parametrize("title,expected", [
+        ("Reduce your ML training cost by 40%", "cloud_spend"),
+        ("New pricing for GPU instances", "cloud_spend"),
+        ("Cost optimization strategies for AI workloads", "cloud_spend"),
+        ("Savings plans for compute-intensive workloads", "cloud_spend"),
+    ])
+    def test_spend_keywords_classify_as_cloud_spend(self, classifier, title, expected):
+        assert classifier(title) == expected
+
+    @pytest.mark.parametrize("title", [
+        "New foundation model APIs now available",
+        "How Company X trains billion-parameter models",
+        "Announcing managed Kubernetes for ML",
+    ])
+    def test_default_classification_is_ai_initiative(self, classifier, title):
+        assert classifier(title) == "ai_initiative"

@@ -3,29 +3,53 @@ FastAPI layer exposing the existing Python backend as JSON endpoints.
 Thin wrapper — all business logic lives in the existing modules.
 """
 
+import logging
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 from pydantic import BaseModel
+
+logger = logging.getLogger("iren.api")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from database.db import get_session, init_db
-from database.models import Company, CompetitorEvent, ProspectBrief, ProspectScore, Signal
+from database.models import Company, CompetitorEvent, Contact, ProspectBrief, ProspectScore, Signal
 from scoring.engine import get_latest_scores, get_score_deltas, score_all_prospects
 from scoring.weights import SIGNAL_WEIGHTS
+from scoring.timing import TIMING_WINDOWS, get_action_insight, get_urgency
 from ai.brief_generator import generate_brief, generate_outreach_email, generate_battle_card
 from ai.client import get_ai_client, call_with_fallback
-from config import SIGNAL_TYPES
+from config import SIGNAL_TYPES, IREN_BENCHMARK, COMPETITOR_SEGMENTS, COMPETITOR_SEGMENT_DEFAULT
 
 init_db()
 
 app = FastAPI(title="Iren Sales Intelligence API", version="1.0.0")
 
+
+class RequestLogMiddleware(BaseHTTPMiddleware):
+    """Log each request: method, path, status, duration."""
+
+    async def dispatch(self, request: Request, call_next):
+        start = time.perf_counter()
+        method = request.method
+        path = request.url.path
+        logger.info("request %s %s", method, path)
+        response = await call_next(request)
+        duration_ms = round((time.perf_counter() - start) * 1000)
+        logger.info("response %s %s %s %dms", method, path, response.status_code, duration_ms)
+        return response
+
+
+app.add_middleware(RequestLogMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -52,6 +76,7 @@ def _company_dict(c: Company, score: ProspectScore | None = None, delta: float =
         "founded_year": c.founded_year,
         "is_public": c.is_public,
         "ticker": c.ticker,
+        "product_fit": c.product_fit,
         "capacity_mw": c.capacity_mw,
         "gpu_count": c.gpu_count,
         "known_pricing": c.known_pricing,
@@ -75,10 +100,12 @@ def _score_dict(s: ProspectScore) -> dict:
     }
 
 
-def _signal_dict(s: Signal) -> dict:
+def _signal_dict(s: Signal, company_name: str = "") -> dict:
+    timing = TIMING_WINDOWS.get(s.signal_type)
     return {
         "id": s.id,
         "company_id": s.company_id,
+        "company_name": company_name,
         "signal_type": s.signal_type,
         "title": s.title,
         "summary": s.summary,
@@ -86,6 +113,22 @@ def _signal_dict(s: Signal) -> dict:
         "source_type": s.source_type,
         "magnitude": s.magnitude,
         "detected_at": s.detected_at.isoformat() if s.detected_at else None,
+        "action_window": s.action_window or (timing["window"] if timing else None),
+        "action_insight": s.action_insight or get_action_insight(s.signal_type, company_name),
+        "urgency": get_urgency(s.signal_type),
+        "timing_insight": timing["insight"] if timing else None,
+    }
+
+
+def _contact_dict(c: Contact) -> dict:
+    return {
+        "id": c.id,
+        "title": c.title,
+        "role_type": c.role_type,
+        "seniority": c.seniority,
+        "recommended_approach": c.recommended_approach,
+        "name": c.name,
+        "last_contacted": c.last_contacted.isoformat() if c.last_contacted else None,
     }
 
 
@@ -188,12 +231,38 @@ def get_prospect(prospect_id: int):
 
         signals = (
             session.query(Signal)
-            .filter(Signal.company_id == company.id, Signal.is_active == True)
+            .filter(Signal.company_id == company.id, Signal.is_active == True, Signal.signal_type != "other")
             .order_by(Signal.detected_at.desc())
             .limit(20)
             .all()
         )
-        d["signals"] = [_signal_dict(s) for s in signals]
+        d["signals"] = [_signal_dict(s, company.name) for s in signals]
+
+        # Contacts / stakeholders
+        contacts = (
+            session.query(Contact)
+            .filter(Contact.company_id == company.id)
+            .all()
+        )
+        d["contacts"] = [_contact_dict(c) for c in contacts]
+
+        # Engagement windows — derive from recent signals
+        engagement_windows = []
+        seen_types: set[str] = set()
+        for sig in signals:
+            if sig.signal_type in seen_types:
+                continue
+            timing = TIMING_WINDOWS.get(sig.signal_type)
+            if timing:
+                seen_types.add(sig.signal_type)
+                engagement_windows.append({
+                    "signal_type": sig.signal_type,
+                    "window": timing["window"],
+                    "insight": timing["insight"],
+                    "urgency": get_urgency(sig.signal_type),
+                    "detected_at": sig.detected_at.isoformat() if sig.detected_at else None,
+                })
+        d["engagement_windows"] = engagement_windows
 
         cached_story = (
             session.query(ProspectBrief)
@@ -231,7 +300,8 @@ def list_signals(
         if company_id:
             q = q.filter(Signal.company_id == company_id)
         signals = q.order_by(Signal.detected_at.desc()).limit(limit).all()
-        return [_signal_dict(s) for s in signals]
+        company_names = {c.id: c.name for c in session.query(Company).all()}
+        return [_signal_dict(s, company_names.get(s.company_id, "")) for s in signals]
     finally:
         session.close()
 
@@ -258,32 +328,54 @@ def signal_stats(days: int = Query(default=7, ge=1, le=365)):
 # Competitors
 # ---------------------------------------------------------------------------
 
+def _derive_segment(industry: str | None) -> str:
+    """Map a company's industry string to a canonical competitor segment."""
+    if not industry:
+        return COMPETITOR_SEGMENT_DEFAULT
+    upper = industry.upper()
+    for keyword, segment in COMPETITOR_SEGMENTS.items():
+        if keyword.upper() in upper:
+            return segment
+    return COMPETITOR_SEGMENT_DEFAULT
+
+
 @app.get("/api/competitors")
 def list_competitors():
     session = get_session()
     try:
+        cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
         competitors = session.query(Company).filter(Company.company_type == "competitor").order_by(Company.name).all()
+
         result = []
         for c in competitors:
             d = _company_dict(c)
+            d["segment"] = _derive_segment(c.industry)
+
             signals = (
                 session.query(Signal)
                 .filter(Signal.company_id == c.id)
                 .order_by(Signal.detected_at.desc())
-                .limit(3)
+                .limit(5)
                 .all()
+            )
+            d["signal_count_30d"] = sum(
+                1 for s in signals if s.detected_at and s.detected_at >= cutoff_30d
             )
             events = (
                 session.query(CompetitorEvent)
                 .filter(CompetitorEvent.company_id == c.id)
                 .order_by(CompetitorEvent.detected_at.desc())
-                .limit(3)
+                .limit(5)
                 .all()
             )
             d["signals"] = [_signal_dict(s) for s in signals]
             d["events"] = [_event_dict(e) for e in events]
             result.append(d)
-        return result
+
+        iren = dict(IREN_BENCHMARK)
+        iren["segment"] = _derive_segment(iren["industry"])
+
+        return {"iren": iren, "competitors": result}
     finally:
         session.close()
 
@@ -386,7 +478,7 @@ def dashboard():
                 "outgrowing": round(score.outgrowing_score, 1),
             }
 
-        def _latest_signal_headline(company_id: int) -> str | None:
+        def _latest_signal_info(company_id: int, company_name: str) -> dict:
             sig = (
                 session.query(Signal)
                 .filter(
@@ -397,22 +489,44 @@ def dashboard():
                 .order_by(Signal.detected_at.desc())
                 .first()
             )
-            return sig.title if sig else None
+            if not sig:
+                return {"headline": None, "action_insight": None, "urgency": None}
+            return {
+                "headline": sig.title,
+                "action_insight": sig.action_insight or get_action_insight(sig.signal_type, company_name),
+                "urgency": get_urgency(sig.signal_type),
+            }
+
+        def _primary_contact(company_id: int) -> dict | None:
+            # Highest seniority technical contact
+            seniority_order = {"c_suite": 0, "vp": 1, "director": 2}
+            contacts = session.query(Contact).filter(Contact.company_id == company_id).all()
+            if not contacts:
+                return None
+            tech_contacts = [c for c in contacts if c.role_type == "technical"]
+            target = tech_contacts if tech_contacts else contacts
+            target.sort(key=lambda c: seniority_order.get(c.seniority, 99))
+            c = target[0]
+            return _contact_dict(c)
 
         call_list = []
         for company, score, delta in sorted(ranked, key=lambda x: x[2], reverse=True):
             if delta <= 0:
                 break
-            headline = _latest_signal_headline(company.id)
+            sig_info = _latest_signal_info(company.id, company.name)
             call_list.append({
                 "id": company.id,
                 "name": company.name,
                 "industry": company.industry,
+                "product_fit": company.product_fit,
                 "score": round(score.total_score, 1),
                 "tier": _tier_label(score.total_score, all_scores),
                 "delta": round(delta, 1),
                 "top_signal_type": _top_signal_type(session, company.id),
-                "headline": headline,
+                "headline": sig_info["headline"],
+                "action_insight": sig_info["action_insight"],
+                "urgency": sig_info["urgency"],
+                "primary_contact": _primary_contact(company.id),
                 "score_breakdown": _score_breakdown(score),
             })
             if len(call_list) >= 8:
@@ -426,6 +540,7 @@ def dashboard():
                 "id": company.id,
                 "name": company.name,
                 "industry": company.industry,
+                "product_fit": company.product_fit,
                 "score": round(score.total_score, 1),
                 "tier": _tier_label(score.total_score, all_scores),
                 "delta": round(delta, 1),
@@ -441,6 +556,7 @@ def dashboard():
                 "id": company.id,
                 "name": company.name,
                 "industry": company.industry,
+                "product_fit": company.product_fit,
                 "score": round(score.total_score, 1),
                 "tier": _tier_label(score.total_score, all_scores),
                 "delta": round(delta, 1),
@@ -675,11 +791,17 @@ def admin_stats():
         session.close()
 
 
+class SeedRequest(BaseModel):
+    web_search: bool = False
+    embed: bool = False
+
+
 @app.post("/api/admin/seed")
-def seed_db():
+def seed_db(req: SeedRequest | None = Body(default=None)):
     from database.seed import seed_database
-    seed_database()
-    return {"status": "seeded"}
+    opts = req if req is not None else SeedRequest()
+    seed_database(use_web_search=opts.web_search, run_embed_after=opts.embed)
+    return {"status": "seeded", "web_search": opts.web_search, "embed": opts.embed}
 
 
 @app.post("/api/admin/rescore")

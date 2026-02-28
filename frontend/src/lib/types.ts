@@ -19,6 +19,26 @@ export type SignalType =
   | "cloud_spend"
   | "outgrowing"
 
+export type ProductFit = "ai_cloud" | "colocation" | "build_to_suit"
+
+export interface Contact {
+  id: number
+  title: string
+  role_type: "technical" | "economic" | "champion" | "procurement"
+  seniority: string
+  recommended_approach: string
+  name: string
+  last_contacted: string | null
+}
+
+export interface EngagementWindow {
+  signal_type: string
+  window: string
+  insight: string
+  urgency: string
+  detected_at: string | null
+}
+
 export interface Prospect {
   id: number
   name: string
@@ -31,6 +51,7 @@ export interface Prospect {
   founded_year: number | null
   is_public: boolean
   ticker: string | null
+  product_fit: ProductFit | null
   capacity_mw: number | null
   gpu_count: number | null
   known_pricing: string | null
@@ -42,12 +63,15 @@ export interface Prospect {
   signals_7d: number
   top_signal_type: SignalType | null
   signals?: Signal[]
+  contacts?: Contact[]
+  engagement_windows?: EngagementWindow[]
   score_story?: string | null
 }
 
 export interface Signal {
   id: number
   company_id: number
+  company_name?: string
   signal_type: string
   title: string
   summary: string
@@ -55,6 +79,10 @@ export interface Signal {
   source_type: string
   magnitude: number
   detected_at: string | null
+  action_window: string | null
+  action_insight: string | null
+  urgency: string | null
+  timing_insight: string | null
 }
 
 export interface CompetitorEvent {
@@ -84,8 +112,27 @@ export interface Competitor {
   total_funding: number | null
   score: ProspectScore | null
   delta: number
+  segment: string
+  signal_count_30d: number
   signals: Signal[]
   events: CompetitorEvent[]
+}
+
+export interface IrenBenchmark {
+  name: string
+  industry: string
+  capacity_mw: number | null
+  gpu_count: number | null
+  is_public: boolean
+  ticker: string
+  hq_location: string
+  website: string
+  segment: string
+}
+
+export interface CompetePageData {
+  iren: IrenBenchmark
+  competitors: Competitor[]
 }
 
 export type ScoreBreakdown = Record<string, number>
@@ -117,11 +164,15 @@ export interface CallListEntry {
   id: number
   name: string
   industry: string
+  product_fit: ProductFit | null
   score: number
   tier: Tier
   delta: number
   top_signal_type: SignalType | null
   headline: string | null
+  action_insight: string | null
+  urgency: string | null
+  primary_contact: Contact | null
   score_breakdown: ScoreBreakdown
 }
 
@@ -129,6 +180,7 @@ export interface DashboardProspect {
   id: number
   name: string
   industry: string
+  product_fit: ProductFit | null
   score: number
   tier: Tier
   delta: number

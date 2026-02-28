@@ -4,7 +4,7 @@
 
 import json
 
-from ai.client import get_ai_client, get_model, get_fallback_model
+from ai.client import get_ai_client, get_bulk_model
 
 SYSTEM_PROMPT = """You are a signal classifier for a sales intelligence platform at Iren, 
 an HPC data center company.
@@ -41,37 +41,32 @@ def extract_signal(title: str, content: str = "", company_name: str = "") -> dic
         return _fallback_extraction(title)
 
     user_prompt = f"Company: {company_name}\nTitle: {title}\nContent: {content[:2000]}"
-    primary = get_model()
-    fallback = get_fallback_model()
+    model = get_bulk_model()
 
-    for model in [primary, fallback]:
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                max_tokens=200,
-                temperature=0.1,
-            )
-            text = response.choices[0].message.content.strip()
-            if text.startswith("```"):
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-            result = json.loads(text)
-            return {
-                "signal_type": result.get("signal_type", "other"),
-                "magnitude": result.get("magnitude", 1.0),
-                "confidence": result.get("confidence", 0.5),
-                "key_facts": result.get("key_facts", ""),
-            }
-        except Exception as e:
-            if model == primary:
-                print(f"[signal_extractor] {primary} failed ({e}), trying {fallback}")
-            else:
-                print(f"[signal_extractor] {fallback} also failed: {e}")
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            max_tokens=200,
+            temperature=0.1,
+        )
+        text = response.choices[0].message.content.strip()
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        result = json.loads(text)
+        return {
+            "signal_type": result.get("signal_type", "other"),
+            "magnitude": result.get("magnitude", 1.0),
+            "confidence": result.get("confidence", 0.5),
+            "key_facts": result.get("key_facts", ""),
+        }
+    except Exception as e:
+        print(f"[signal_extractor] bulk model {model} failed: {e}")
 
     return _fallback_extraction(title)
 

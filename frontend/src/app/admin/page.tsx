@@ -34,7 +34,10 @@ export default function AdminPage() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { loadStats() }, [])
+  useEffect(() => {
+    const t = setTimeout(loadStats, 0)
+    return () => clearTimeout(t)
+  }, [])
 
   const handleSeed = async () => {
     setSeedStatus("loading")
