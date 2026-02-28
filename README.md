@@ -1,6 +1,6 @@
 # Iren Sales Intelligence Platform
 
-Signal-driven GTM intelligence for Iren's commercial team — 290 prospects across 15 segments, 10 data collectors, AI-generated briefs, and a scoring engine that surfaces timing.
+Signal-driven GTM intelligence for Iren's commercial team — 290 prospects across 15 segments, 15 competitors across 5 market segments, 11 data collectors, AI-generated briefs, and a scoring engine that surfaces timing.
 
 ## The Problem
 
@@ -18,7 +18,9 @@ Signal intelligence mapped to the buyer journey. Every prospect signal maps to o
 
 **Actively Evaluating** — Company is outgrowing current provider. Capacity complaints, migration signals, vendor switching discussions. This is the highest-urgency window — they're in-market now.
 
-10 data collectors pull from free public sources. A weighted scoring engine with exponential recency decay ranks prospects across 6 signal categories (max 100 points). AI-generated briefs surface what happened, why it matters, what to do, and by when. Three-tier LLM cost model runs the entire collection pipeline for ~$0.15/run.
+11 data collectors pull from free public sources. A weighted scoring engine with exponential recency decay ranks prospects across 6 signal categories (max 100 points). AI-generated briefs surface what happened, why it matters, what to do, and by when. Three-tier LLM cost model runs the entire collection pipeline for ~$0.15/run.
+
+A competitive intelligence layer tracks 15 competitors across 5 market segments (Neocloud, Hyperscaler, DC REIT, Power-First, International), each profiled with key customers, pricing intel, strengths/weaknesses, and an Iren-relative threat level. Prospect-level competitive context maps which competitors a rep is likely bidding against for any given deal, based on the prospect's product fit.
 
 ## Architecture
 
@@ -27,37 +29,41 @@ Signal intelligence mapped to the buyer journey. Every prospect signal maps to o
 │  DATA SOURCES (all free)                                        │
 │  RSS Feeds · Google News · SEC EDGAR · ATS (Greenhouse/Lever)   │
 │  Earnings Transcripts · GitHub · ArXiv · Hacker News · Blogs    │
+│  DuckDuckGo Search (competitive intel)                          │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
                     ┌──────▼──────┐
-                    │  10 Collectors  │
-                    │  (Python)       │
+                    │ 11 Collectors   │
+                    │ (Python)        │
                     └──────┬──────┘
                            │
-              ┌────────────▼────────────┐
-              │  Signals DB (SQLite)    │
-              │  + Ollama Embeddings    │  ← semantic dedup, similar signal search
-              └────────────┬────────────┘
-                           │
-              ┌────────────▼────────────┐
-              │  Scoring Engine         │
-              │  recency decay ×        │
-              │  magnitude × confidence │
-              └────────────┬────────────┘
-                           │
-              ┌────────────▼────────────┐
-              │  AI Layer               │
-              │  briefs, emails,        │
-              │  battle cards, digest   │
-              └────────────┬────────────┘
-                           │
-              ┌────────────▼────────────┐
-              │  FastAPI (JSON API)     │
-              └────────────┬────────────┘
-                           │
-              ┌────────────▼────────────┐
-              │  Next.js Frontend       │
-              └─────────────────────────┘
+         ┌─────────────────┼─────────────────┐
+         ▼                 ▼                 ▼
+┌─────────────────┐ ┌──────────────┐ ┌──────────────────┐
+│  Signals DB     │ │  Competitor   │ │  Ollama          │
+│  (SQLite)       │ │  Events DB    │ │  Embeddings      │
+└────────┬────────┘ └──────┬───────┘ └──────────────────┘
+         │                 │
+         ▼                 ▼
+┌─────────────────────────────────────┐
+│  Scoring Engine + Competitive Intel │
+│  recency decay × magnitude ×       │
+│  confidence + threat assessment     │
+└────────────────┬────────────────────┘
+                 │
+    ┌────────────▼────────────┐
+    │  AI Layer               │
+    │  briefs, emails,        │
+    │  battle cards, digest   │
+    └────────────┬────────────┘
+                 │
+    ┌────────────▼────────────┐
+    │  FastAPI (JSON API)     │
+    └────────────┬────────────┘
+                 │
+    ┌────────────▼────────────┐
+    │  Next.js Frontend       │
+    └─────────────────────────┘
 ```
 
 **LLM tiers:**
@@ -97,8 +103,9 @@ Each signal carries an urgency level (URGENT / HIGH / MEDIUM) and an action temp
 | `arxiv` | ArXiv RSS (cs.AI, cs.LG, cs.CL) | ai_initiative | Free |
 | `hn` | Hacker News API | hiring, fundraising, outgrowing | Free |
 | `cloud_blogs` | AWS/GCP/Azure blog RSS | ai_initiative, cloud_spend | Free |
+| `competitive_intel` | DuckDuckGo web search | CompetitorEvents (deal, expansion, pricing, talent) | Free |
 
-All collectors inherit from `BaseCollector` which handles session management, semantic dedup via Ollama embeddings, and per-item error isolation (one failed article doesn't skip the rest).
+All collectors inherit from `BaseCollector` which handles session management, semantic dedup via Ollama embeddings, and per-item error isolation (one failed article doesn't skip the rest). The `competitive_intel` collector searches for each competitor's recent deals, expansions, pricing changes, and talent moves, creating `CompetitorEvent` rows (separate from prospect signals).
 
 ## Prospect Coverage
 
@@ -122,7 +129,27 @@ All collectors inherit from `BaseCollector` which handles session management, se
 
 **Product fit distribution:** 139 AI Cloud, 135 Colocation, 16 Build-to-Suit.
 
-15 competitors tracked across 5 segments: Neoclouds, Hyperscaler Cloud, DC REITs, Power-First/Energy, and International players. Each competitor has a battle card with positioning, strengths/weaknesses, and key battleground metrics.
+## Competitive Intelligence
+
+15 competitors tracked across 5 market segments. Each competitor is profiled with key customers, pricing intel, strengths, weaknesses, and an Iren-relative threat level (high/medium/low). This is the data a Bain GTM strategy team would compile — structured for reps, not analysts.
+
+| Segment | Competitors | Key Battleground | Iren Positioning |
+|---------|------------|------------------|------------------|
+| Neocloud | CoreWeave, Crusoe, Lambda, Nebius, Voltage Park | GPU availability, NVIDIA allocation, pricing/GPU-hr | Iren supplies the infrastructure neoclouds run on |
+| Hyperscaler | AWS, Google Cloud | Scale (GW-level), speed to deploy, grid proximity | Iren builds overflow capacity when demand exceeds their DC pipeline |
+| DC REIT | Equinix, Digital Realty, QTS, CyrusOne, Vantage | Power density (kW/rack), campus scale, PUE | Iren differentiates on AI-ready design + renewable energy cost advantage |
+| Power-First | Lancium, Applied Digital | Power cost ($/kWh), MW pipeline, construction speed | Direct competitors — same energy-first playbook |
+| International | Adani Group | Geography, regulatory approval, talent access | Iren competes on US proximity and operational track record |
+
+**Threat assessment:** 7 high-threat (CoreWeave, Crusoe, Nebius, QTS, Vantage, Lancium, Applied Digital), 4 medium (Lambda, Voltage Park, Digital Realty, CyrusOne), 4 low (AWS, Google Cloud, Equinix, Adani).
+
+**Prospect-level competitive context:** Every prospect's product fit (AI Cloud, Colocation, Build-to-Suit) maps to relevant competitor segments. When a rep opens a prospect, they see which competitors they're likely bidding against, recent competitive moves from those competitors, and Iren's positioning edge. The mapping:
+
+- `ai_cloud` → Neocloud + Hyperscaler competitors
+- `colocation` → DC REIT + Power-First competitors
+- `build_to_suit` → Power-First + DC REIT competitors
+
+**Data enrichment:** The `competitive_intel` collector runs web searches per competitor to discover recent deals, facility expansions, pricing changes, and executive hires. Results are classified and stored as `CompetitorEvent` rows, feeding the activity feed and competitive pulse.
 
 ## Scoring Model
 
@@ -152,9 +179,12 @@ Hiring is weighted highest (25 points) because infrastructure job postings are t
 
 Next.js 16 + React 19 + Tailwind CSS 4 + shadcn/ui. Four pages:
 
-- **Today** — Dashboard with a prioritized call list, live funding tracker, competitor alerts, and the daily digest. The call list ranks prospects by score × urgency and shows the engagement window for each.
-- **Prospects** — Filterable table (by segment, product fit, score range) with expandable detail sheets. Each prospect has an AI brief, engagement window, recommended contacts, and outreach email draft.
-- **Compete** — Battle cards for each competitor segment. Side-by-side comparison on power density, campus scale, PUE, pricing, and NVIDIA allocation.
+- **Today** — Dashboard with a prioritized call list, live funding tracker, competitive pulse card, and the daily digest. The call list ranks prospects by score x urgency and shows the engagement window for each. Competitive Pulse shows 7-day event/signal counts, high-threat count, and the most active competitor.
+- **Prospects** — Filterable table (by segment, product fit, score range) with expandable detail sheets. Each prospect has an AI brief, engagement window, recommended contacts, outreach email draft, and a **Competitive Context** section showing likely competitors, their threat levels, and recent moves.
+- **Compete** — Three-tab competitive intelligence hub:
+  - **Market Landscape** — Segment overview cards with Iren positioning and key battlegrounds. Sortable competitor table with threat level badges, key customers, capacity bars, and activity counts. Iren benchmark row pinned at top.
+  - **Head-to-Head** — Side-by-side comparison of any two competitors (or Iren vs. a competitor) on capacity, GPUs, pricing, customers, strengths, and weaknesses.
+  - **Activity Feed** — Chronological feed of competitor events and signals, filterable by type (deal, expansion, pricing, talent). Links to source articles.
 - **Admin** — Company management, scoring config, collector status, system health.
 
 Signal cards display the full reasoning chain: **What happened** → **So what** → **Do this** → **By when**. Reps don't need to interpret signals — the platform tells them what the signal means for Iren and what the next action is.
@@ -166,9 +196,17 @@ Signal cards display the full reasoning chain: **What happened** → **So what**
 pip install -r requirements.txt
 cp .env.example .env  # add OPENROUTER_API_KEY for AI features
 
-# Seed prospects and run collectors
+# Seed prospects + competitors (with competitive intel)
 python -c "from database.seed import seed_database; seed_database()"
+
+# If upgrading an existing database, run migration for new competitor fields
+python3 scripts/add_company_columns.py
+
+# Run all collectors (includes competitive intel web search)
 python -m collectors.runner
+
+# Or run just the competitive intel collector
+python -m collectors.runner competitive_intel
 
 # Score all prospects
 python -c "from scoring.engine import score_all_prospects; score_all_prospects()"

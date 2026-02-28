@@ -114,6 +114,10 @@ export interface Competitor {
   delta: number
   segment: string
   signal_count_30d: number
+  key_customers: string[]
+  strengths: string[]
+  weaknesses: string[]
+  threat_level: "high" | "medium" | "low"
   signals: Signal[]
   events: CompetitorEvent[]
 }
@@ -128,11 +132,72 @@ export interface IrenBenchmark {
   hq_location: string
   website: string
   segment: string
+  key_customers?: string[]
+  known_pricing?: string
+  strengths?: string[]
+  weaknesses?: string[]
+  expansion_plans?: string
+}
+
+export interface SegmentProfile {
+  name: string
+  description: string
+  iren_positioning: string
+  key_battleground: string
+  competitor_count: number
+  total_capacity_mw: number
+}
+
+export interface ActivityFeedItem {
+  type: "event" | "signal"
+  event_type: string
+  company_name: string
+  company_id: number
+  title: string
+  description: string
+  source_url: string
+  detected_at: string | null
+}
+
+export interface LandscapeData {
+  iren: IrenBenchmark
+  competitors: Competitor[]
+  segments: SegmentProfile[]
+  activity_feed: ActivityFeedItem[]
 }
 
 export interface CompetePageData {
   iren: IrenBenchmark
   competitors: Competitor[]
+}
+
+export interface CompetitiveContext {
+  prospect_name: string
+  product_fit: string
+  likely_competitors: {
+    id: number
+    name: string
+    segment: string
+    threat_level: string
+    capacity_mw: number | null
+    key_customers: string[]
+    known_pricing: string | null
+  }[]
+  recent_moves: {
+    company_name: string
+    event_type: string
+    title: string
+    detected_at: string | null
+  }[]
+  iren_edge: string
+}
+
+export interface CompetitivePulse {
+  events_7d: number
+  signals_7d: number
+  most_active: string
+  most_active_count: number
+  high_threat_count: number
 }
 
 export type ScoreBreakdown = Record<string, number>
@@ -201,6 +266,7 @@ export interface DashboardData {
   cooling: DashboardProspect[]
   top_ranked: DashboardProspect[]
   alerts: DashboardAlert[]
+  competitive_pulse: CompetitivePulse
 }
 
 export interface SignalStats {

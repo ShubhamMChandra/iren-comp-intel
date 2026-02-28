@@ -27,6 +27,7 @@ collectors/
   funding_collector.py → Funding signal regex classification
   jobs_collector.py → Infrastructure hiring keyword detection
   sec_collector.py  → SEC EDGAR filings
+  competitive_intel_collector.py → Web-search competitive event discovery
   runner.py         → CLI orchestrator for collectors
 scoring/
   weights.py        → Signal weight config (max_points, base_points, halflife)
@@ -50,9 +51,13 @@ tests/              → pytest suite with in-memory DB fixtures
 - Company has `company_type`: either `"prospect"` or `"competitor"`
 - Signal types: `fundraising`, `funding_completed`, `hiring`, `ai_initiative`, `cloud_spend`, `outgrowing`
 - Source types: `sec_filing`, `major_news`, `industry_news`, `blog`, `social_media`, `rumor`
+- Competitor event types: `deal`, `expansion`, `pricing`, `talent`
 - Scoring: 6 categories sum to max 100 points with exponential recency decay
 - Every AI generation function must have a `_fallback_*` that works without an API key
 - Embeddings are stored as JSON-serialized float lists in `Signal.embedding`
+- Competitor fields: `key_customers` (JSON list), `strengths` (JSON list), `weaknesses` (JSON list), `threat_level` ("high"/"medium"/"low"), `known_pricing` (text)
+- `SEGMENT_PROFILES` in config.py define positioning/battlegrounds per competitor segment
+- `PRODUCT_FIT_TO_SEGMENTS` in config.py maps prospect product_fit to relevant competitor segments
 
 ## Ollama Conventions
 - Ollama is used ONLY for embeddings (`nomic-embed-text`), NOT for generation

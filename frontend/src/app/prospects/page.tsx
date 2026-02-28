@@ -24,9 +24,9 @@ import { ScoreBadge } from "@/components/score-badge"
 import { SignalBadge } from "@/components/signal-badge"
 import { ProductBadge } from "@/components/product-badge"
 import { DeltaValue } from "@/components/delta-value"
-import { getProspects, getProspect, generateBrief, generateEmail } from "@/lib/api"
+import { getProspects, getProspect, generateBrief, generateEmail, getCompetitiveContext } from "@/lib/api"
 import { cn, formatDate, computeDeadline, ROLE_TYPE_COLORS, ROLE_TYPE_LABELS, URGENCY_COLORS } from "@/lib/utils"
-import type { Prospect, Tier } from "@/lib/types"
+import type { CompetitiveContext, Prospect, Tier } from "@/lib/types"
 import { SourceBadge } from "@/components/source-badge"
 import { ArrowUpDown, ArrowUp, ArrowDown, Search, Sparkles, Mail, ExternalLink, Loader2, Users, Zap, Clock } from "lucide-react"
 
@@ -171,6 +171,7 @@ function ProspectsPageInner() {
   const [briefLoading, setBriefLoading] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
   const [emailLoading, setEmailLoading] = useState(false)
+  const [compContext, setCompContext] = useState<CompetitiveContext | null>(null)
 
   useEffect(() => {
     getProspects()
@@ -197,10 +198,12 @@ function ProspectsPageInner() {
     setDetailError(false)
     setBrief(null)
     setEmail(null)
+    setCompContext(null)
     setDetailLoading(true)
     try {
       const d = await getProspect(id)
       setDetail(d)
+      getCompetitiveContext(id).then(setCompContext).catch(() => {})
     } catch (err) {
       console.error("Failed to load prospect detail:", err)
       setDetailError(true)
@@ -561,6 +564,51 @@ function ProspectsPageInner() {
                       ))}
                     </div>
                   </div>
+                )}
+
+                {/* Competitive Context */}
+                {compContext && compContext.likely_competitors.length > 0 && (
+                  <>
+                    <Separator />
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Competitive Context</h3>
+                      {compContext.iren_edge && (
+                        <p className="text-xs text-[#22c55e] mb-3 italic">{compContext.iren_edge}</p>
+                      )}
+                      <div className="space-y-1.5">
+                        {compContext.likely_competitors.slice(0, 5).map((lc) => (
+                          <div key={lc.id} className="flex items-center justify-between rounded-md border border-border/30 px-3 py-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-medium">{lc.name}</span>
+                              <Badge variant="outline" className="text-[8px]">{lc.segment}</Badge>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[9px]",
+                                lc.threat_level === "high" && "text-red-400 border-red-400/30",
+                                lc.threat_level === "medium" && "text-amber-400 border-amber-400/30",
+                                lc.threat_level === "low" && "text-green-400 border-green-400/30",
+                              )}
+                            >
+                              {lc.threat_level}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                      {compContext.recent_moves.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-1.5">Recent Competitor Moves</p>
+                          {compContext.recent_moves.map((m, i) => (
+                            <div key={i} className="flex items-center gap-2 py-1">
+                              <Badge variant="outline" className="text-[8px] capitalize">{m.event_type}</Badge>
+                              <span className="text-[11px] text-muted-foreground flex-1 truncate">{m.company_name}: {m.title}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
 
                 <Separator />

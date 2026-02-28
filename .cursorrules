@@ -8,7 +8,7 @@ Sales intelligence tool for Iren's commercial team. Scores prospect companies (A
 - `app.py` — Streamlit entrypoint
 - `config.py` — env vars, constants, all signal/source type enums
 - `database/` — SQLAlchemy models (Company, Signal, ProspectScore, CompetitorEvent), session management, seed data
-- `collectors/` — data pipeline: news (RSS), funding (regex), jobs (keywords), SEC EDGAR filings
+- `collectors/` — data pipeline: news (RSS), funding (regex), jobs (keywords), SEC EDGAR filings, competitive intel (web search)
 - `scoring/` — weighted scoring engine with recency decay, max 100 points across 6 categories
 - `ai/` — OpenRouter for generation (summarizer, classifier, brief generator) with keyword fallbacks; Ollama for local embeddings (dedup, semantic search, similar signals) with graceful no-op fallback
 - `pages/` — Streamlit pages: dashboard, prospects, competitors, signal feed, settings

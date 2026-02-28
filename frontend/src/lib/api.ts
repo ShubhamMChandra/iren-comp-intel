@@ -1,8 +1,10 @@
 import type {
   AdminStats,
   CompetePageData,
+  CompetitiveContext,
   Competitor,
   DashboardData,
+  LandscapeData,
   Prospect,
   SearchResult,
   Signal,
@@ -86,6 +88,9 @@ export const getSignalStats = (days?: number) =>
 export const getCompetitors = () => fetchAPI<CompetePageData>("/api/competitors")
 export const getCompetitor = (id: number) =>
   fetchAPI<Competitor>(`/api/competitors/${id}`)
+export const getLandscape = () => fetchAPI<LandscapeData>("/api/compete/landscape")
+export const getCompetitiveContext = (prospectId: number) =>
+  fetchAPI<CompetitiveContext>(`/api/prospects/${prospectId}/competitive-context`)
 
 // --- Briefs (POST) ---
 export const generateBrief = (companyId: number) =>

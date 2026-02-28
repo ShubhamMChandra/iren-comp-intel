@@ -28,7 +28,14 @@ from scoring.weights import SIGNAL_WEIGHTS
 from scoring.timing import TIMING_WINDOWS, get_action_insight, get_urgency
 from ai.brief_generator import generate_brief, generate_outreach_email, generate_battle_card
 from ai.client import get_ai_client, call_with_fallback
-from config import SIGNAL_TYPES, IREN_BENCHMARK, COMPETITOR_SEGMENTS, COMPETITOR_SEGMENT_DEFAULT
+from config import (
+    SIGNAL_TYPES,
+    IREN_BENCHMARK,
+    COMPETITOR_SEGMENTS,
+    COMPETITOR_SEGMENT_DEFAULT,
+    SEGMENT_PROFILES,
+    PRODUCT_FIT_TO_SEGMENTS,
+)
 
 init_db()
 
@@ -409,6 +416,177 @@ def get_competitor(competitor_id: int):
         session.close()
 
 
+def _parse_json_field(value: str | None) -> list:
+    if not value:
+        return []
+    try:
+        import json
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
+@app.get("/api/compete/landscape")
+def compete_landscape():
+    session = get_session()
+    try:
+        cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
+        competitors = session.query(Company).filter(Company.company_type == "competitor").order_by(Company.name).all()
+
+        enriched = []
+        segment_agg: dict[str, dict] = {}
+
+        for c in competitors:
+            seg = _derive_segment(c.industry)
+            signal_count = (
+                session.query(Signal)
+                .filter(Signal.company_id == c.id, Signal.detected_at >= cutoff_30d)
+                .count()
+            )
+            d = _company_dict(c)
+            d["segment"] = seg
+            d["signal_count_30d"] = signal_count
+            d["key_customers"] = _parse_json_field(c.key_customers)
+            d["strengths"] = _parse_json_field(c.strengths)
+            d["weaknesses"] = _parse_json_field(c.weaknesses)
+            d["threat_level"] = c.threat_level or "medium"
+            enriched.append(d)
+
+            if seg not in segment_agg:
+                segment_agg[seg] = {"count": 0, "total_capacity_mw": 0}
+            segment_agg[seg]["count"] += 1
+            segment_agg[seg]["total_capacity_mw"] += c.capacity_mw or 0
+
+        segments = []
+        for seg_name, profile in SEGMENT_PROFILES.items():
+            agg = segment_agg.get(seg_name, {"count": 0, "total_capacity_mw": 0})
+            segments.append({
+                "name": seg_name,
+                "description": profile["description"],
+                "iren_positioning": profile["iren_positioning"],
+                "key_battleground": profile["key_battleground"],
+                "competitor_count": agg["count"],
+                "total_capacity_mw": agg["total_capacity_mw"],
+            })
+
+        all_events = (
+            session.query(CompetitorEvent)
+            .order_by(CompetitorEvent.detected_at.desc())
+            .limit(30)
+            .all()
+        )
+        all_signals = (
+            session.query(Signal)
+            .join(Company)
+            .filter(Company.company_type == "competitor", Signal.detected_at >= cutoff_30d)
+            .order_by(Signal.detected_at.desc())
+            .limit(30)
+            .all()
+        )
+        company_names = {c.id: c.name for c in competitors}
+
+        activity_feed = []
+        for e in all_events:
+            activity_feed.append({
+                "type": "event",
+                "event_type": e.event_type,
+                "company_name": company_names.get(e.company_id, "Unknown"),
+                "company_id": e.company_id,
+                "title": e.title,
+                "description": e.description,
+                "source_url": e.source_url,
+                "detected_at": e.detected_at.isoformat() if e.detected_at else None,
+            })
+        for s in all_signals:
+            activity_feed.append({
+                "type": "signal",
+                "event_type": s.signal_type,
+                "company_name": company_names.get(s.company_id, "Unknown"),
+                "company_id": s.company_id,
+                "title": s.title,
+                "description": s.summary or "",
+                "source_url": s.source_url,
+                "detected_at": s.detected_at.isoformat() if s.detected_at else None,
+            })
+        activity_feed.sort(key=lambda x: x["detected_at"] or "", reverse=True)
+
+        iren = dict(IREN_BENCHMARK)
+        iren["segment"] = _derive_segment(iren.get("industry"))
+
+        return {
+            "iren": iren,
+            "competitors": enriched,
+            "segments": segments,
+            "activity_feed": activity_feed[:50],
+        }
+    finally:
+        session.close()
+
+
+@app.get("/api/prospects/{prospect_id}/competitive-context")
+def prospect_competitive_context(prospect_id: int):
+    session = get_session()
+    try:
+        prospect = session.query(Company).filter(Company.id == prospect_id, Company.company_type == "prospect").first()
+        if not prospect:
+            raise HTTPException(status_code=404, detail="Prospect not found")
+
+        pfit = prospect.product_fit or ""
+        relevant_segments = PRODUCT_FIT_TO_SEGMENTS.get(pfit, list(SEGMENT_PROFILES.keys()))
+
+        competitors = session.query(Company).filter(Company.company_type == "competitor").all()
+        likely = []
+        for c in competitors:
+            seg = _derive_segment(c.industry)
+            if seg in relevant_segments:
+                likely.append({
+                    "id": c.id,
+                    "name": c.name,
+                    "segment": seg,
+                    "threat_level": c.threat_level or "medium",
+                    "capacity_mw": c.capacity_mw,
+                    "key_customers": _parse_json_field(c.key_customers),
+                    "known_pricing": c.known_pricing,
+                })
+
+        comp_ids = [c["id"] for c in likely]
+        cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
+        recent_moves = []
+        if comp_ids:
+            events = (
+                session.query(CompetitorEvent)
+                .filter(CompetitorEvent.company_id.in_(comp_ids), CompetitorEvent.detected_at >= cutoff_30d)
+                .order_by(CompetitorEvent.detected_at.desc())
+                .limit(5)
+                .all()
+            )
+            company_names = {c.id: c.name for c in competitors}
+            for e in events:
+                recent_moves.append({
+                    "company_name": company_names.get(e.company_id, "Unknown"),
+                    "event_type": e.event_type,
+                    "title": e.title,
+                    "detected_at": e.detected_at.isoformat() if e.detected_at else None,
+                })
+
+        iren_edge = ""
+        for seg in relevant_segments:
+            profile = SEGMENT_PROFILES.get(seg)
+            if profile:
+                iren_edge = profile["iren_positioning"]
+                break
+
+        return {
+            "prospect_name": prospect.name,
+            "product_fit": pfit,
+            "likely_competitors": likely,
+            "recent_moves": recent_moves,
+            "iren_edge": iren_edge,
+        }
+    finally:
+        session.close()
+
+
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
@@ -601,9 +779,41 @@ def dashboard():
             "cooling": cooling,
             "top_ranked": top_ranked,
             "alerts": alerts,
+            "competitive_pulse": _competitive_pulse(session),
         }
     finally:
         session.close()
+
+
+def _competitive_pulse(session) -> dict:
+    cutoff_7d = datetime.now(timezone.utc) - timedelta(days=7)
+    events_7d = session.query(CompetitorEvent).filter(CompetitorEvent.detected_at >= cutoff_7d).count()
+    competitor_signals = (
+        session.query(Signal)
+        .join(Company)
+        .filter(Company.company_type == "competitor", Signal.detected_at >= cutoff_7d)
+        .count()
+    )
+    competitor_companies = session.query(Company).filter(Company.company_type == "competitor").all()
+    high_threat_count = sum(1 for c in competitor_companies if c.threat_level == "high")
+
+    most_active_name, most_active_count = "None", 0
+    for c in competitor_companies:
+        cnt = (
+            session.query(CompetitorEvent)
+            .filter(CompetitorEvent.company_id == c.id, CompetitorEvent.detected_at >= cutoff_7d)
+            .count()
+        )
+        if cnt > most_active_count:
+            most_active_name, most_active_count = c.name, cnt
+
+    return {
+        "events_7d": events_7d,
+        "signals_7d": competitor_signals,
+        "most_active": most_active_name,
+        "most_active_count": most_active_count,
+        "high_threat_count": high_threat_count,
+    }
 
 
 @app.get("/api/dashboard/digest")

@@ -34,6 +34,13 @@ After modifying weights, adding signals, or changing scoring logic:
 python -c "from scoring.engine import score_all_prospects; score_all_prospects()"
 ```
 
+## Running Competitive Intel Collection
+After adding competitors or to refresh competitive events:
+```bash
+python -m collectors.runner competitive_intel
+```
+This searches the web for each competitor's recent deals, expansions, pricing changes, and talent moves. Results are stored as `CompetitorEvent` rows.
+
 ## Backfilling Embeddings
 After adding new signals without Ollama running, or to embed all existing signals:
 ```bash

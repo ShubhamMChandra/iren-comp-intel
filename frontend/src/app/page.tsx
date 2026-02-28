@@ -102,7 +102,7 @@ export default function DashboardPage() {
     )
   }
 
-  const { kpis, call_list, cooling, top_ranked, alerts } = data
+  const { kpis, call_list, cooling, top_ranked, alerts, competitive_pulse } = data
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric", year: "numeric",
   })
@@ -440,30 +440,63 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {/* Competitor Alerts */}
-          {alerts.length > 0 && (
-            <Card className="border-border/50">
-              <CardHeader className="pb-3">
+          {/* Competitive Pulse */}
+          <Card className="border-border/50">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-amber-400" />
-                  <CardTitle className="text-sm font-medium">Competitor Moves</CardTitle>
+                  <CardTitle className="text-sm font-medium">Competitive Pulse</CardTitle>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {alerts.map((a, i) => (
-                    <div key={i} className="rounded-md border border-border/30 px-3 py-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold">{a.company_name}</span>
-                        <Badge variant="outline" className="text-[10px]">{a.event_type}</Badge>
-                      </div>
-                      <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">{a.title}</p>
+                <Link href="/compete" className="text-xs font-medium text-[#22c55e] hover:underline">
+                  Full intel →
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {competitive_pulse ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-md border border-border/30 px-3 py-2 text-center">
+                      <p className="text-lg font-semibold tabular-nums">{competitive_pulse.events_7d}</p>
+                      <p className="text-[10px] text-muted-foreground">Events (7d)</p>
                     </div>
-                  ))}
+                    <div className="rounded-md border border-border/30 px-3 py-2 text-center">
+                      <p className="text-lg font-semibold tabular-nums">{competitive_pulse.signals_7d}</p>
+                      <p className="text-[10px] text-muted-foreground">Signals (7d)</p>
+                    </div>
+                    <div className="rounded-md border border-red-400/20 px-3 py-2 text-center">
+                      <p className="text-lg font-semibold tabular-nums text-red-400">{competitive_pulse.high_threat_count}</p>
+                      <p className="text-[10px] text-muted-foreground">High Threat</p>
+                    </div>
+                  </div>
+                  {competitive_pulse.most_active !== "None" && (
+                    <div className="rounded-md border border-amber-400/20 bg-amber-400/5 px-3 py-2">
+                      <p className="text-xs">
+                        <span className="font-semibold text-amber-400">{competitive_pulse.most_active}</span>
+                        {" "}is most active with {competitive_pulse.most_active_count} events this week
+                      </p>
+                    </div>
+                  )}
+                  {alerts.length > 0 && (
+                    <div className="space-y-1.5">
+                      {alerts.slice(0, 3).map((a, i) => (
+                        <div key={i} className="rounded-md border border-border/30 px-3 py-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold">{a.company_name}</span>
+                            <Badge variant="outline" className="text-[10px]">{a.event_type}</Badge>
+                          </div>
+                          <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">{a.title}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              ) : (
+                <p className="text-sm text-muted-foreground py-4 text-center">No competitor activity detected</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 
