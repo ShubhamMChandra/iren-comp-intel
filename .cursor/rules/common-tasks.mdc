@@ -6,13 +6,14 @@ alwaysApply: true
 # Common Multi-File Tasks
 
 ## Adding a New Signal Type
-1. `config.py` — add to `SIGNAL_TYPES` list
+1. `config.py` — add to `SIGNAL_TYPES` list and to `SIGNAL_LABELS` and `SIGNAL_DESCRIPTIONS` (for README)
 2. `scoring/weights.py` — add entry to `SIGNAL_WEIGHTS` (max_points, base_points, halflife). Ensure all max_points still sum to 100
 3. `database/models.py` — add `<name>_score` column to `ProspectScore`
 4. `scoring/engine.py` — add the new field to the `ProspectScore(...)` constructor in `score_prospect()`
 5. Every page's icon map — add icon to `TYPE_ICONS` in `dashboard.py`, `prospects.py`, `signal_feed.py`
 6. `tests/test_scoring.py` — update `test_all_signal_types_have_weights` and `test_max_points_sum_to_100`
-7. Run `pytest` to verify
+7. Run `python scripts/update_readme.py` to refresh the README scoring table, then commit the updated README
+8. Run `pytest` to verify
 
 ## Adding a New Collector
 1. Create `collectors/<name>_collector.py` inheriting from `BaseCollector`
@@ -40,3 +41,6 @@ python -m ai.embed_backfill           # only signals missing embeddings
 python -m ai.embed_backfill --force   # re-embed everything
 ```
 Requires Ollama running with `nomic-embed-text` pulled (`ollama pull nomic-embed-text`).
+
+## README auto-update
+When you change signal types, scoring weights in `scoring/weights.py`, or add a collector, run `python scripts/update_readme.py` from the repo root and commit the updated README. The script regenerates the Scoring Model table from `config.py` and `scoring/weights.py`.

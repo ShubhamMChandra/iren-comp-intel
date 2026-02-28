@@ -76,6 +76,7 @@ python -m ai.embed_backfill
 
 ## Scoring Model
 
+<!-- AUTO: scoring-table -->
 | Signal | Max Points | What It Detects |
 |--------|-----------|-----------------|
 | Active Fundraising | 20 | Currently raising — timing signal for outreach |
@@ -84,6 +85,7 @@ python -m ai.embed_backfill
 | AI Initiatives | 15 | Model training, AI product launches |
 | Cloud Spend | 15 | High cloud bills, cost optimization signals |
 | Outgrowing Provider | 10 | Capacity complaints, provider switching |
+<!-- /AUTO -->
 
 Scores decay exponentially with signal age; configurable half-lives per signal type in `scoring/weights.py`.
 

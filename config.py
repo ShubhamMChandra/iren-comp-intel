@@ -49,6 +49,24 @@ SIGNAL_TYPES = [
     "other",
 ]
 
+# Human-readable labels and descriptions for README scoring table (used by scripts/update_readme.py)
+SIGNAL_LABELS = {
+    "fundraising": "Active Fundraising",
+    "funding_completed": "Completed Funding",
+    "hiring": "Infrastructure Hiring",
+    "ai_initiative": "AI Initiatives",
+    "cloud_spend": "Cloud Spend",
+    "outgrowing": "Outgrowing Provider",
+}
+SIGNAL_DESCRIPTIONS = {
+    "fundraising": "Currently raising — timing signal for outreach",
+    "funding_completed": "Recently closed a round — capacity signal",
+    "hiring": "GPU/ML/infra job postings — strongest demand signal",
+    "ai_initiative": "Model training, AI product launches",
+    "cloud_spend": "High cloud bills, cost optimization signals",
+    "outgrowing": "Capacity complaints, provider switching",
+}
+
 COMPETITOR_EVENT_TYPES = [
     "deal",
     "expansion",
