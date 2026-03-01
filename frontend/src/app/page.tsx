@@ -244,7 +244,26 @@ export default function DashboardPage() {
               <Skeleton className="h-4 w-3/4" />
             </div>
           ) : digest ? (
-            <p className="text-sm leading-relaxed text-muted-foreground">{digest}</p>
+            <div className="space-y-4 text-sm leading-relaxed text-muted-foreground">
+              {digest.split(/\n\n+/).map((section, i) => {
+                const lines = section.split('\n')
+                return (
+                  <div key={i} className="space-y-1">
+                    {lines.map((line, j) => {
+                      const bold = line.match(/^\*\*(.+?)\*\*(.*)/)
+                      if (bold) {
+                        return <p key={j}><span className="font-semibold text-foreground">{bold[1]}</span>{bold[2]}</p>
+                      }
+                      if (line.startsWith('- ')) {
+                        return <p key={j} className="pl-3">• {line.slice(2)}</p>
+                      }
+                      if (line.trim() === '') return null
+                      return <p key={j}>{line}</p>
+                    })}
+                  </div>
+                )
+              })}
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground/60">
               Digest unavailable — configure your AI API key to generate daily intelligence briefs.
@@ -355,7 +374,7 @@ export default function DashboardPage() {
                               href={`/prospects?id=${p.id}`}
                               className="inline-flex items-center gap-1 text-xs font-medium text-[#22c55e] hover:underline"
                             >
-                              Prep <ArrowRight className="h-3 w-3" />
+                              <span className="hidden sm:inline">Prep</span> <ArrowRight className="h-3 w-3" />
                             </Link>
                           </td>
                         </tr>

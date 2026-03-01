@@ -100,6 +100,7 @@ const columns: ColumnDef<Prospect>[] = [
   {
     accessorKey: "industry",
     header: "Industry",
+    meta: { hideOnMobile: true },
     cell: ({ row }) => <span className="text-muted-foreground">{row.original.industry}</span>,
   },
   {
@@ -145,6 +146,7 @@ const columns: ColumnDef<Prospect>[] = [
     id: "top_signal",
     accessorFn: (row) => row.top_signal_type,
     header: "Top Signal",
+    meta: { hideOnMobile: true },
     cell: ({ row }) =>
       row.original.top_signal_type ? (
         <SignalBadge type={row.original.top_signal_type} />
@@ -156,6 +158,7 @@ const columns: ColumnDef<Prospect>[] = [
   {
     accessorKey: "hq_location",
     header: "HQ",
+    meta: { hideOnMobile: true },
     cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.hq_location}</span>,
   },
 ]
@@ -274,7 +277,7 @@ function ProspectsPageInner() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -314,14 +317,17 @@ function ProspectsPageInner() {
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id} className="border-b border-border/50">
                     {headerGroup.headers.map((header) => {
-                      const isRight = (header.column.columnDef.meta as { align?: string } | undefined)?.align === "right"
+                      const meta = header.column.columnDef.meta as { align?: string; hideOnMobile?: boolean } | undefined
+                      const isRight = meta?.align === "right"
+                      const hideOnMobile = meta?.hideOnMobile
                       return (
                         <th
                           key={header.id}
                           className={cn(
                             "px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground",
                             isRight ? "text-right" : "text-left",
-                            header.column.getCanSort() && "cursor-pointer select-none transition-colors hover:bg-muted/30 hover:text-foreground rounded"
+                            header.column.getCanSort() && "cursor-pointer select-none transition-colors hover:bg-muted/30 hover:text-foreground rounded",
+                            hideOnMobile && "hidden md:table-cell"
                           )}
                           onClick={header.column.getToggleSortingHandler()}
                         >
@@ -351,9 +357,11 @@ function ProspectsPageInner() {
                     onClick={() => openDetail(row.original.id)}
                   >
                     {row.getVisibleCells().map((cell) => {
-                      const isRight = (cell.column.columnDef.meta as { align?: string } | undefined)?.align === "right"
+                      const meta = cell.column.columnDef.meta as { align?: string; hideOnMobile?: boolean } | undefined
+                      const isRight = meta?.align === "right"
+                      const hideOnMobile = meta?.hideOnMobile
                       return (
-                        <td key={cell.id} className={cn("px-3 py-2", isRight && "text-right")}>
+                        <td key={cell.id} className={cn("px-3 py-2", isRight && "text-right", hideOnMobile && "hidden md:table-cell")}>
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
                       )

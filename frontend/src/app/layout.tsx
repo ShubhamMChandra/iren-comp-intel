@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
+import { MobileHeader } from "@/components/mobile-header"
 import { CommandPalette } from "@/components/command-palette"
 import "./globals.css"
 
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <SidebarProvider>
               <AppSidebar />
               <main className="flex-1 overflow-auto">
+                <MobileHeader />
                 {children}
               </main>
               <CommandPalette />

@@ -1016,7 +1016,7 @@ DIGEST_SYSTEM_MSG = (
     "implications. You do not issue directives or assign tasks — but you do connect "
     "the dots between signals and what they mean for Iren's pipeline. When a signal "
     "has a clear engagement window or product fit, say so.\n\n"
-    "FORMAT: Up to 3 themed sections. Each section has a short **bold theme name** "
+    "FORMAT: 3-4 themed sections. Each section has a short **bold theme name** "
     "followed by a paragraph or a few bullet points — whichever communicates the "
     "information most clearly. Use bullets for lists of signals or movers; use prose "
     "for narrative context or implications. Separate sections with a blank line.\n\n"
@@ -1030,12 +1030,15 @@ DIGEST_SYSTEM_MSG = (
     "- Note what score category is driving movement, not just the total.\n\n"
     "RULES:\n"
     "1. Name names. Never say 'several companies' or 'multiple prospects.'\n"
-    "2. Surface implications, not commands. 'CoreWeave's VERY HIGH score and 30-120 day "
-    "funding window make them a strong AI Cloud candidate this quarter' is good. "
-    "'Call CoreWeave today' is not your job.\n"
+    "2. Surface implications, not commands. '[Company]'s VERY HIGH score and 30-120 day "
+    "funding window makes them a strong AI Cloud candidate this quarter' is good. "
+    "'Call [Company] today' is not your job.\n"
     "3. Choose themes that match the data. Likely themes: pipeline movement, capital and "
     "infrastructure signals, competitive landscape — but adapt to what's material.\n"
-    "4. Skip a theme if the data doesn't warrant it. Two strong sections beat three thin ones."
+    "4. Cover the full funnel. A MEDIUM-tier prospect with an active fundraising signal "
+    "and a near-term engagement window is as actionable as a VERY HIGH prospect whose "
+    "score is decaying. Give every active tier proportional depth — MEDIUM and LOW "
+    "prospects are the working pipeline for the day-to-day sales team."
 )
 
 MORNING_FRAME = (
@@ -1104,23 +1107,33 @@ def _build_digest_context(session, period: str) -> str:
         f"  {len(prospects)} prospects tracked | {movers} with score movement | {len(signals)} active signals",
     ]
 
-    # --- TOP PIPELINE (ranked leaderboard) ---
-    ranked = sorted(
+    # --- PIPELINE BY TIER (full-funnel grouped view) ---
+    tier_order = ["VERY HIGH", "HIGH", "MEDIUM", "LOW", "DORMANT"]
+    all_ranked = sorted(
         [(p, score_map.get(p.id)) for p in prospects if score_map.get(p.id) and score_map[p.id].total_score > 0],
         key=lambda x: x[1].total_score,
         reverse=True,
-    )[:7]
-    if ranked:
-        lines.append("")
-        lines.append("TOP PIPELINE:")
-        for i, (p, score) in enumerate(ranked, 1):
-            tier = _tier_label(score.total_score, all_scores)
+    )
+    by_tier: dict[str, list[tuple]] = {t: [] for t in tier_order}
+    for p, score in all_ranked:
+        t = _tier_label(score.total_score, all_scores)
+        by_tier[t].append((p, score))
+
+    lines.append("")
+    lines.append("PIPELINE BY TIER:")
+    for t in tier_order:
+        entries = by_tier[t]
+        if not entries:
+            continue
+        parts = []
+        for p, score in entries:
             pfit = PRODUCT_FIT_LABELS.get(p.product_fit or "", p.product_fit or "")
             delta = deltas.get(p.id, 0.0)
             cats = _score_category_leaders(score)
             top_cat = f"{cats[0][0]} ({cats[0][1]:.1f}/{cats[0][2]:.0f})" if cats[0][1] > 0 else ""
             delta_str = f" ({delta:+.1f})" if abs(delta) > 0.1 else ""
-            lines.append(f"  {i}. {p.name} — {score.total_score:.1f}{delta_str} {tier} — {pfit} — led by {top_cat}")
+            parts.append(f"{p.name} {score.total_score:.1f}{delta_str} — {pfit} — led by {top_cat}")
+        lines.append(f"  {t}: " + " | ".join(parts))
 
     # --- SIGNALS with urgency + timing windows ---
     lines.append("")
@@ -1260,7 +1273,7 @@ def dashboard_digest(period: str | None = Query(None)):
             {"role": "system", "content": DIGEST_SYSTEM_MSG},
             {"role": "user", "content": f"{frame}\n\n{context_block}"},
         ]
-        result = call_premium(client, messages, max_tokens=1400, temperature=0.3)
+        result = call_premium(client, messages, max_tokens=2400, temperature=0.3)
 
         if result:
             brief = ProspectBrief(company_id=None, brief_text=result, brief_type=brief_type)

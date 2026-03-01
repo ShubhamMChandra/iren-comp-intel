@@ -66,7 +66,7 @@ export default function AdminPage() {
     return (
       <div className="p-6 space-y-6">
         <Skeleton className="h-8 w-32" />
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24" />)}
         </div>
         <Skeleton className="h-64" />
@@ -165,7 +165,7 @@ export default function AdminPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Scoring Weights</CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             {stats && (
               <table className="w-full text-sm">
                 <thead>
