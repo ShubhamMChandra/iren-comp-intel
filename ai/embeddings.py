@@ -37,9 +37,9 @@ def _hf_embed(texts: list[str]) -> list[list[float] | None]:
         return [None] * len(texts)
     try:
         resp = requests.post(
-            f"https://api-inference.huggingface.co/models/{HF_EMBED_MODEL}",
+            f"https://router.huggingface.co/hf-inference/models/{HF_EMBED_MODEL}/pipeline/feature-extraction",
             headers={"Authorization": f"Bearer {HF_TOKEN}"},
-            json={"inputs": texts, "options": {"wait_for_model": True}},
+            json={"inputs": texts},
             timeout=30,
         )
         resp.raise_for_status()

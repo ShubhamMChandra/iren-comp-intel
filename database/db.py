@@ -45,11 +45,14 @@ def _migrate_prospect_briefs_nullable(conn) -> None:
 
 
 def init_db():
-    """Create all tables, apply migrations, and auto-seed if the DB is empty."""
+    """Create all tables and apply lightweight schema migrations."""
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
         _migrate_prospect_briefs_nullable(conn)
 
+
+def auto_seed_if_empty():
+    """Seed companies if the DB is empty. Call after init_db(), not inside it."""
     session = SessionLocal()
     try:
         from database.models import Company

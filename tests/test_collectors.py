@@ -548,6 +548,8 @@ from collectors.vedp_collector import (
     _extract_jobs,
 )
 from collectors.loudoun_dc_collector import LoudounDCCollector, _status_rank
+from collectors.pwc_dc_collector import PWCDCCollector, _status_rank as pwc_status_rank
+from collectors.cof_collector import COFCollector, _parse_dollar, _looks_like_tech
 
 
 class TestVEDPHelpers:
@@ -727,6 +729,152 @@ class TestLoudounDCCollector:
 
         signals = session.query(Signal).all()
         assert len(signals) == 0
+
+
+class TestPWCDCCollector:
+    """Test PWC data center collector logic."""
+
+    @pytest.mark.parametrize("old_status,new_status,order,should_progress", [
+        ("Planned", "Under Construction", ["Planned", "Approved", "Under Construction", "Operational"], True),
+        ("Under Construction", "Operational", ["Planned", "Approved", "Under Construction", "Operational"], True),
+        ("Operational", "Under Construction", ["Planned", "Approved", "Under Construction", "Operational"], False),
+        (None, "Planned", ["Planned", "Approved", "Under Construction", "Operational"], True),
+    ])
+    def test_status_progression(self, old_status, new_status, order, should_progress):
+        collector = PWCDCCollector.__new__(PWCDCCollector)
+        assert collector._progressed(old_status, new_status, order) == should_progress
+
+    def test_new_building_creates_signal(self, session, sample_prospect):
+        """New building with matching company name should create outgrowing signal."""
+        collector = PWCDCCollector.__new__(PWCDCCollector)
+        collector.session = session
+        collector.signals_created = 0
+        collector.semantic_dupes_caught = 0
+        collector._name_map = {}
+        collector._build_name_map([sample_prospect])
+
+        collector._handle_new_building(
+            name=f"{sample_prospect.name} Data Center VA-1",
+            status="Operational",
+            gfa=250_000,
+            mw=50,
+        )
+        session.commit()
+
+        signals = session.query(Signal).filter(Signal.company_id == sample_prospect.id).all()
+        assert len(signals) == 1
+        assert signals[0].signal_type == "outgrowing"
+
+    def test_new_project_creates_signal(self, session, sample_prospect):
+        """New campus project for known company should create outgrowing signal."""
+        collector = PWCDCCollector.__new__(PWCDCCollector)
+        collector.session = session
+        collector.signals_created = 0
+        collector.semantic_dupes_caught = 0
+        collector._name_map = {}
+        collector._build_name_map([sample_prospect])
+
+        collector._handle_new_project(
+            name=f"{sample_prospect.name} Tech Campus",
+            status="Planned",
+            planned_gfa=5_000_000,
+            case="REZ2024-00001",
+        )
+        session.commit()
+
+        signals = session.query(Signal).filter(Signal.company_id == sample_prospect.id).all()
+        assert len(signals) == 1
+        assert signals[0].signal_type == "outgrowing"
+        assert "Planned" in signals[0].title
+
+    def test_no_match_no_signal(self, session):
+        """Unknown company should produce no signal."""
+        collector = PWCDCCollector.__new__(PWCDCCollector)
+        collector.session = session
+        collector.signals_created = 0
+        collector.semantic_dupes_caught = 0
+        collector._name_map = {}
+
+        collector._handle_new_building("UnknownCorpXYZ Building A", "Operational", 100_000, 0)
+        session.commit()
+
+        assert session.query(Signal).count() == 0
+
+
+class TestCOFCollector:
+    """Test COF/VJIP PDF collector logic."""
+
+    @pytest.mark.parametrize("text,expected", [
+        ("$1,500,000", 1_500_000.0),
+        ("$1.067B", 1_067_000_000.0),
+        ("$500M", 500_000_000.0),
+        ("$250,000,000", 250_000_000.0),
+        (None, None),
+        ("N/A", None),
+    ])
+    def test_dollar_parsing(self, text, expected):
+        assert _parse_dollar(text) == expected
+
+    @pytest.mark.parametrize("name,expected", [
+        ("Microsoft Corporation", True),
+        ("Amazon Web Services", True),
+        ("Data Center Solutions Inc", True),
+        ("Cloud Computing Corp", True),
+        ("Blue Ridge Furniture Company", False),
+        ("Shenandoah Valley Beef", False),
+    ])
+    def test_tech_company_detection(self, name, expected):
+        assert _looks_like_tech(name) == expected
+
+    def test_row_parsing_skips_header(self):
+        collector = COFCollector.__new__(COFCollector)
+        header_row = ["Project #", "Company", "Locality", "Grant", "Jobs", "CapEx"]
+        assert collector._parse_row(header_row) is None
+
+    def test_row_parsing_extracts_data(self):
+        collector = COFCollector.__new__(COFCollector)
+        row = ["2018-140024", "Microsoft BN 9-13", "Mecklenburg", "$1,500,000", "108", "$1,066,755,918", "$100,000"]
+        result = collector._parse_row(row)
+        assert result is not None
+        assert result["company"] == "Microsoft BN 9-13"
+        assert result["locality"] == "Mecklenburg"
+        assert result["grant"] == pytest.approx(1_500_000, rel=0.01)
+        assert result["capex"] == pytest.approx(1_066_755_918, rel=0.01)
+
+    def test_emit_signal_for_matched_company(self, session, sample_prospect):
+        """Matched company from COF row should get a funding_completed signal."""
+        collector = COFCollector.__new__(COFCollector)
+        collector.session = session
+        collector.signals_created = 0
+        collector.semantic_dupes_caught = 0
+        collector._name_map = {}
+        collector._build_name_map([sample_prospect])
+
+        row = {
+            "company": sample_prospect.name,
+            "locality": "Loudoun County",
+            "grant": 1_500_000.0,
+            "capex": 1_000_000_000.0,
+        }
+        collector._emit_signal(sample_prospect, row, "COF Within Performance")
+        session.commit()
+
+        signals = session.query(Signal).filter(Signal.company_id == sample_prospect.id).all()
+        assert len(signals) == 1
+        assert signals[0].signal_type == "funding_completed"
+        assert signals[0].magnitude == pytest.approx(1.0, rel=0.01)
+
+    def test_company_matching_partial_name(self, session, sample_prospect):
+        """Partial name like 'Microsoft BN 9-13' should still match 'Microsoft'."""
+        collector = COFCollector.__new__(COFCollector)
+        collector.session = session
+        collector._name_map = {}
+        collector._build_name_map([sample_prospect])
+
+        partial = f"{sample_prospect.name.split()[0]} Project X"
+        result = collector._match_company(partial)
+        assert result is not None
+        assert result.id == sample_prospect.id
 
 
 class TestCloudBlogClassification:

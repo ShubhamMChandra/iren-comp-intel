@@ -33,7 +33,7 @@ logger = logging.getLogger("iren.api")
 _level = getattr(logging, LOG_LEVEL, logging.INFO)
 logging.basicConfig(level=_level, format="%(levelname)s %(name)s %(message)s")
 
-from database.db import get_session, init_db
+from database.db import auto_seed_if_empty, get_session, init_db
 from database.models import Company, CompetitorEvent, Contact, ProspectBrief, ProspectScore, Signal
 from scoring.engine import get_latest_scores, get_score_deltas, score_all_prospects
 from scoring.weights import SIGNAL_WEIGHTS
@@ -44,6 +44,7 @@ from ai.brief_generator import _build_iren_context, _funding_stage, PRODUCT_FIT_
 from ai.embeddings import deserialize_embedding, cosine_similarity
 
 init_db()
+auto_seed_if_empty()
 
 app = FastAPI(title="Iren Sales Intelligence API", version="1.0.0")
 
