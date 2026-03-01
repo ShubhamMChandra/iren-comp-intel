@@ -157,6 +157,9 @@ def get_score_deltas(session) -> dict[int, float]:
     for company_id, scores in by_company.items():
         if len(scores) >= 2 and scores[1].total_score > 0:
             deltas[company_id] = scores[0].total_score - scores[1].total_score
+        elif len(scores) == 1 and scores[0].total_score > 0:
+            # First-ever score — the whole score is the delta (came from nothing)
+            deltas[company_id] = scores[0].total_score
         else:
             deltas[company_id] = 0.0
 
