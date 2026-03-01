@@ -21,17 +21,13 @@ VEDP_SITEMAP_URL = "https://www.vedp.org/sitemap.xml"
 
 STATE_FILE = Path("data/vedp_seen_urls.json")
 
-DC_KEYWORDS = [
-    "data center",
-    "data centre",
-    "hyperscale",
-    "colocation",
-    "megawatt",
-    " MW ",
-    "gigawatt",
-    "cloud campus",
-    "cloud infrastructure",
-]
+try:
+    from private.collector_patterns import DC_KEYWORDS
+except ImportError:
+    DC_KEYWORDS = [
+        "data center", "data centre", "hyperscale", "colocation",
+        "megawatt", " MW ", "gigawatt",
+    ]
 
 AMOUNT_RE = re.compile(
     r"\$\s*([\d,.]+)\s*(billion|million|B\b|M\b|bn|mn)", re.IGNORECASE

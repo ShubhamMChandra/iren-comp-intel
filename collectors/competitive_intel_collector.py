@@ -13,18 +13,20 @@ try:
 except ImportError:
     DDGS = None
 
-SEARCH_TEMPLATES = [
-    '"{name}" data center expansion OR new facility OR deal OR contract',
-    '"{name}" pricing OR GPU rates OR cost per hour OR kW pricing',
-    '"{name}" partnership OR customer win OR signed agreement',
-]
-
-EVENT_KEYWORDS: dict[str, list[str]] = {
-    "deal": ["contract", "deal", "partnership", "agreement", "signed", "customer", "won"],
-    "expansion": ["expansion", "facility", "campus", "construction", "MW", "GW", "build"],
-    "pricing": ["pricing", "price", "cost", "rate", "per hour", "GPU-hr", "kW"],
-    "talent": ["hire", "hired", "CEO", "CTO", "appoint", "executive", "team"],
-}
+try:
+    from private.collector_patterns import SEARCH_TEMPLATES, EVENT_KEYWORDS
+except ImportError:
+    SEARCH_TEMPLATES = [
+        '"{name}" data center expansion OR deal OR contract',
+        '"{name}" pricing OR cost',
+        '"{name}" partnership OR customer win',
+    ]
+    EVENT_KEYWORDS: dict[str, list[str]] = {
+        "deal": ["contract", "deal", "partnership", "agreement"],
+        "expansion": ["expansion", "facility", "campus", "construction"],
+        "pricing": ["pricing", "price", "cost", "rate"],
+        "talent": ["hire", "hired", "CEO", "CTO", "appoint"],
+    }
 
 
 def _classify_event(title: str, body: str) -> str:

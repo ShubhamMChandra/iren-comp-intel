@@ -106,90 +106,44 @@ SOURCE_CONFIDENCE = {
     "rumor": 0.2,
 }
 
-IREN_BENCHMARK = {
-    "name": "Iren",
-    "industry": "AI Data Center / Energy",
-    "capacity_mw": 1100,
-    "gpu_count": None,
-    "is_public": True,
-    "ticker": "IREN",
-    "exchange": "ASX",
-    "hq_location": "Sydney, Australia",
-    "website": "https://iren.com",
-    "key_customers": ["Microsoft"],
-    "known_pricing": "Build-to-suit and colocation; pricing not publicly listed. Competitive on TCO via renewable energy.",
-    "products": {
-        "ai_cloud": "GPU-as-a-service for AI training and inference",
-        "colocation": "High-density colocation with air and liquid cooling",
-        "build_to_suit": "Dedicated campus builds for hyperscaler-scale customers",
-    },
-    "gpu_models": ["H100", "H200", "B200", "B300", "GB300 NVL72"],
-    "locations": ["Texas", "Oklahoma", "British Columbia"],
-    "cooling": ["air", "liquid"],
-    "strengths": [
-        "Vertically integrated: own power generation (renewable)",
-        "Low-cost energy advantage in BC, Canada and Texas",
-        "NVIDIA partnership for next-gen GPU clusters",
-        "Rapid campus buildout capability",
-        "Public company with access to capital markets",
-    ],
-    "weaknesses": [
-        "Smaller scale vs. Equinix/Digital Realty",
-        "Limited brand awareness outside data center industry",
-        "Concentrated geographic footprint",
-    ],
-    "expansion_plans": "2+ GW pipeline across North America. Childress, TX campus under construction.",
-}
+try:
+    from private.iren_config import (
+        IREN_BENCHMARK,
+        COMPETITOR_SEGMENTS,
+        SEGMENT_PROFILES,
+        PRODUCT_FIT_TO_SEGMENTS,
+    )
+except ImportError:
+    IREN_BENCHMARK = {
+        "name": "ACME Corp",
+        "industry": "Data Center / Energy",
+        "capacity_mw": 0,
+        "gpu_count": None,
+        "is_public": False,
+        "ticker": "",
+        "exchange": "",
+        "hq_location": "",
+        "website": "",
+        "key_customers": [],
+        "known_pricing": "",
+        "products": {
+            "ai_cloud": "GPU-as-a-service",
+            "colocation": "High-density colocation",
+            "build_to_suit": "Dedicated campus builds",
+        },
+        "gpu_models": [],
+        "locations": [],
+        "cooling": [],
+        "strengths": [],
+        "weaknesses": [],
+        "expansion_plans": "",
+    }
+    COMPETITOR_SEGMENTS: dict[str, str] = {}
+    SEGMENT_PROFILES: dict[str, dict[str, str]] = {}
+    PRODUCT_FIT_TO_SEGMENTS: dict[str, list[str]] = {
+        "ai_cloud": [],
+        "colocation": [],
+        "build_to_suit": [],
+    }
 
-COMPETITOR_SEGMENTS: dict[str, str] = {
-    "GPU Cloud": "Neocloud",
-    "Neocloud": "Neocloud",
-    "AI Cloud": "Neocloud",
-    "Hyperscaler": "Hyperscaler",
-    "REIT": "DC REIT",
-    "Energy": "Power-First",
-    "Power": "Power-First",
-    "Conglomerate": "International",
-    "Mining": "Miner-to-HPC",
-    "HPC": "Miner-to-HPC",
-}
 COMPETITOR_SEGMENT_DEFAULT = "Data Center"
-
-SEGMENT_PROFILES: dict[str, dict[str, str]] = {
-    "Neocloud": {
-        "description": "GPU cloud providers selling compute-as-a-service to AI labs and enterprises",
-        "iren_positioning": "Iren supplies the infrastructure neoclouds run on — they are both customers and competitors",
-        "key_battleground": "GPU availability, NVIDIA allocation, pricing per GPU-hour, speed to deploy",
-    },
-    "Hyperscaler": {
-        "description": "Mega-scale cloud platforms (AWS, GCP, Azure) with their own silicon and massive capex",
-        "iren_positioning": "Iren builds overflow capacity for hyperscalers when demand exceeds their own DC pipeline",
-        "key_battleground": "Scale (GW-level power), speed to deployment, location near grid capacity",
-    },
-    "DC REIT": {
-        "description": "Data center REITs with large portfolios of colocation and wholesale facilities",
-        "iren_positioning": "Iren differentiates on AI-ready high-density design and renewable energy cost advantage",
-        "key_battleground": "Power density (kW/rack), campus scale, PUE, contract flexibility",
-    },
-    "Power-First": {
-        "description": "Energy-native data center developers building on cheap/renewable power",
-        "iren_positioning": "Direct competitors — Iren's renewable energy heritage is the same playbook",
-        "key_battleground": "Power cost ($/kWh), MW pipeline, construction speed, energy source",
-    },
-    "International": {
-        "description": "Global conglomerates and international players entering the AI data center market",
-        "iren_positioning": "Iren competes on proximity to US demand centers and proven operational track record",
-        "key_battleground": "Geography, regulatory approval, subsea connectivity, talent access",
-    },
-    "Miner-to-HPC": {
-        "description": "Bitcoin miners pivoting to AI/HPC data centers — same origin story as Iren",
-        "iren_positioning": "Direct peers with the same playbook. Iren differentiates on execution speed, renewable energy cost, and customer quality.",
-        "key_battleground": "Pivot execution speed, HPC customer contracts, power cost, GPU deployment timeline",
-    },
-}
-
-PRODUCT_FIT_TO_SEGMENTS: dict[str, list[str]] = {
-    "ai_cloud": ["Neocloud", "Hyperscaler", "Miner-to-HPC"],
-    "colocation": ["DC REIT", "Power-First"],
-    "build_to_suit": ["Power-First", "DC REIT", "Miner-to-HPC"],
-}

@@ -93,61 +93,37 @@ def _parse_json_field(value: str | None) -> list:
     except (json.JSONDecodeError, TypeError):
         return []
 
-BRIEF_SYSTEM_PROMPT = (
-    "You are Iren's CRO preparing an AE for a call. Write what you would put in Slack "
-    "10 minutes before the meeting.\n\n"
-    + _build_iren_context()
-    + "\n\n"
-    "STRUCTURE:\n"
-    "1. THESIS — one sentence on why this company needs Iren and WHICH product (AI Cloud, Colo, or BTS)\n"
-    "2. URGENCY — what signal triggered this and why the timing matters NOW\n"
-    "3. LEAD WITH — the specific opening line for the call, referencing their situation\n"
-    "4. DECISION MAKERS — titles to target and why (not generic VP/CTO lists)\n"
-    "5. COMPETITIVE CONTEXT — who else is probably pitching them, and Iren's angle against each\n\n"
-    "RULES:\n"
-    "- Match the product pitch to their product_fit. Don't pitch BTS to a Series B startup.\n"
-    "- Reference specific signals and scores from the data. Don't invent facts.\n"
-    "- Under 250 words. No filler."
-)
+try:
+    from private.prompts import build_brief_prompt as _private_brief
+    from private.prompts import build_email_prompt as _private_email
+    from private.prompts import build_battlecard_prompt as _private_battlecard
+    _HAS_PRIVATE = True
+except ImportError:
+    _HAS_PRIVATE = False
 
+_iren_ctx = _build_iren_context()
 
-EMAIL_SYSTEM_PROMPT = (
-    "You are a BD lead at Iren drafting a cold email to a prospect. You met people "
-    "like this at industry events — you know their world.\n\n"
-    + _build_iren_context()
-    + "\n\n"
-    "STRUCTURE:\n"
-    "1. Opening hook — reference a SPECIFIC recent signal (name it: the funding round, "
-    "the job posting, the AI launch). Show you did your homework.\n"
-    "2. Value prop — why Iren is relevant to THEIR situation right now. Pitch the right "
-    "product for their product_fit. One concrete differentiator, not a feature list.\n"
-    "3. Soft close — suggest a 15-minute call. Give a reason it is worth their time.\n\n"
-    "RULES:\n"
-    "- Casual authority. Not stiff, not salesy. Like someone who understands their problem.\n"
-    "- Under 120 words. Three short paragraphs.\n"
-    "- No subject line. Just the body."
-)
-
-
-BATTLECARD_SYSTEM_PROMPT = (
-    "You are Iren's head of competitive intelligence. An AE just asked for a battle card "
-    "they can reference throughout a deal cycle. This will be read multiple times over weeks — "
-    "it needs to be a real reference document, not a summary.\n\n"
-    + _build_iren_context()
-    + "\n\n"
-    "STRUCTURE:\n"
-    "1. COMPETITOR SNAPSHOT — what they sell, who buys it, their real strengths (2-3 sentences)\n"
-    "2. WHERE IREN WINS — specific scenarios and proof points, not generic claims\n"
-    "3. WHERE THEY WIN — be honest. AEs lose trust in tools that only say good things.\n"
-    "4. DEAL SCENARIOS — 'If the prospect needs X, lead with Y because Z' (3 scenarios)\n"
-    "5. OBJECTION HANDLING — the 5 most likely objections and word-for-word responses. "
-    "Format each as: 'They say: [objection]' / 'You say: [response]'\n\n"
-    "RULES:\n"
-    "- Be specific. 'Iren has lower PUE' is useless. 'Iren's Childress campus runs 1.1 PUE "
-    "vs. their 1.3-1.4 average' is useful.\n"
-    "- The objection responses should sound like a human talking, not a brochure.\n"
-    "- 500-700 words. This is a reference doc, not a tweet."
-)
+if _HAS_PRIVATE:
+    BRIEF_SYSTEM_PROMPT = _private_brief(_iren_ctx)
+    EMAIL_SYSTEM_PROMPT = _private_email(_iren_ctx)
+    BATTLECARD_SYSTEM_PROMPT = _private_battlecard(_iren_ctx)
+else:
+    BRIEF_SYSTEM_PROMPT = (
+        "You are a sales strategist preparing a brief for a prospect meeting.\n\n"
+        + _iren_ctx + "\n\n"
+        "Provide a concise analysis with talking points, competitive context, and urgency."
+    )
+    EMAIL_SYSTEM_PROMPT = (
+        "You are a BD lead drafting a cold outreach email to a prospect.\n\n"
+        + _iren_ctx + "\n\n"
+        "Reference a recent signal, explain relevance, and close with a soft ask."
+    )
+    BATTLECARD_SYSTEM_PROMPT = (
+        "You are a competitive intelligence analyst creating a battle card.\n\n"
+        + _iren_ctx + "\n\n"
+        "Provide competitor snapshot, where we win, where they win, deal scenarios, "
+        "and objection handling."
+    )
 
 BRIEF_CACHE_DAYS = 7
 

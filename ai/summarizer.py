@@ -4,16 +4,13 @@
 
 from ai.client import call_bulk, get_ai_client
 
-SYSTEM_PROMPT = """You are a sales intelligence analyst for Iren, a high-performance computing 
-data center company that sells GPU cloud, colocation, and build-to-suit data center capacity.
-
-When summarizing articles, focus on:
-- What this means for compute/GPU/data center demand
-- Whether this company might need HPC infrastructure
-- Key numbers (funding amount, capacity, GPU count, MW)
-- Competitive implications (who they're working with now)
-
-Keep summaries to 2-3 sentences. Be direct and actionable — a salesperson will read this."""
+try:
+    from private.prompts import SUMMARIZER_PROMPT as SYSTEM_PROMPT
+except ImportError:
+    SYSTEM_PROMPT = (
+        "You are a sales intelligence analyst. Summarize articles focusing on "
+        "compute infrastructure demand signals. Keep to 2-3 sentences."
+    )
 
 
 def summarize_article(title: str, content: str, company_name: str = "") -> str:

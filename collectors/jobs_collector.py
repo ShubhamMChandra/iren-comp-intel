@@ -35,39 +35,14 @@ def _fetch_feed(url: str) -> feedparser.FeedParserDict:
     except Exception:
         return feedparser.FeedParserDict()
 
-INFRA_KEYWORDS = [
-    "gpu",
-    "cuda",
-    "ml infrastructure",
-    "machine learning infrastructure",
-    "ai infrastructure",
-    "data center",
-    "datacenter",
-    "hpc",
-    "high performance computing",
-    "platform engineer",
-    "infrastructure engineer",
-    "cloud infrastructure",
-    "compute",
-    "kubernetes",
-    "gpu cluster",
-    "distributed systems",
-    "ml platform",
-    "training infrastructure",
-    "inference infrastructure",
-    "site reliability",
-    "sre",
-    "devops",
-    "mlops",
-    "ml engineer",
-    "machine learning engineer",
-    "research scientist",
-    "research engineer",
-    "applied scientist",
-    "nvidia",
-    "nccl",
-    "infiniband",
-]
+try:
+    from private.collector_patterns import INFRA_KEYWORDS
+except ImportError:
+    INFRA_KEYWORDS = [
+        "gpu", "cuda", "ml infrastructure", "ai infrastructure",
+        "data center", "hpc", "platform engineer", "infrastructure engineer",
+        "sre", "mlops", "ml engineer", "distributed systems",
+    ]
 
 GOOGLE_NEWS_JOBS = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
 

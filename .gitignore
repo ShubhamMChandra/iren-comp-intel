@@ -34,6 +34,15 @@ playwright-report/
 # Cursor internal
 .cursor/plans/
 
+# Private config (prompts, weights, patterns — secret sauce)
+private/
+
+# One-off scripts with API keys / prospect data
+scripts/parallel_prospect_search.py
+scripts/parallel_prospect_builder.py
+scripts/consolidate_prospects.py
+scripts/*.json
+
 # IDE / OS
 .DS_Store
 .idea/

@@ -1006,49 +1006,20 @@ def _competitive_pulse(session) -> dict:
     }
 
 
-DIGEST_SYSTEM_MSG = (
-    "You are Iren's market intelligence desk. You produce the daily signal digest "
-    "that lands in the commercial team's inbox — the kind of brief their market "
-    "research and GTM research teams would send.\n\n"
-    + _build_iren_context()
-    + "\n\n"
-    "VOICE: Authoritative, informed, concise. You report, contextualize, and surface "
-    "implications. You do not issue directives or assign tasks — but you do connect "
-    "the dots between signals and what they mean for Iren's pipeline. When a signal "
-    "has a clear engagement window or product fit, say so.\n\n"
-    "FORMAT: 3-4 themed sections. Each section has a short **bold theme name** "
-    "followed by a paragraph or a few bullet points — whichever communicates the "
-    "information most clearly. Use bullets for lists of signals or movers; use prose "
-    "for narrative context or implications. Separate sections with a blank line.\n\n"
-    "DATA USAGE:\n"
-    "- The data includes a ranked pipeline, individual signals with urgency and timing "
-    "windows, score movers with category breakdowns, competitive events, and key contacts.\n"
-    "- Use tier labels (VERY HIGH, HIGH, etc.) when referencing prospects.\n"
-    "- Cite engagement windows when they add urgency context (e.g. '30-120 day window').\n"
-    "- Connect every signal to the relevant Iren product (AI Cloud, Colo, or BTS).\n"
-    "- Name the stakeholder contact when one is provided for a rising prospect.\n"
-    "- Note what score category is driving movement, not just the total.\n\n"
-    "RULES:\n"
-    "1. Name names. Never say 'several companies' or 'multiple prospects.'\n"
-    "2. Surface implications, not commands. '[Company]'s VERY HIGH score and 30-120 day "
-    "funding window makes them a strong AI Cloud candidate this quarter' is good. "
-    "'Call [Company] today' is not your job.\n"
-    "3. Choose themes that match the data. Likely themes: pipeline movement, capital and "
-    "infrastructure signals, competitive landscape — but adapt to what's material.\n"
-    "4. Cover the full funnel. A MEDIUM-tier prospect with an active fundraising signal "
-    "and a near-term engagement window is as actionable as a VERY HIGH prospect whose "
-    "score is decaying. Give every active tier proportional depth — MEDIUM and LOW "
-    "prospects are the working pipeline for the day-to-day sales team."
-)
-
-MORNING_FRAME = (
-    "Here is the overnight data. Summarize what happened, "
-    "who moved, and what it means for Iren's pipeline."
-)
-AFTERNOON_FRAME = (
-    "Here is what moved since this morning. Summarize "
-    "what changed, whose priority shifted, and any emerging patterns."
-)
+try:
+    from private.prompts import build_digest_prompt as _private_digest
+    from private.prompts import MORNING_FRAME, AFTERNOON_FRAME
+    DIGEST_SYSTEM_MSG = _private_digest(_build_iren_context())
+except ImportError:
+    DIGEST_SYSTEM_MSG = (
+        "You are a market intelligence analyst producing a daily signal digest.\n\n"
+        + _build_iren_context()
+        + "\n\n"
+        "Produce 3-4 themed sections covering pipeline movement, signals, and competitive "
+        "landscape. Name names, cite engagement windows, and cover the full funnel."
+    )
+    MORNING_FRAME = "Summarize overnight signals and pipeline movement."
+    AFTERNOON_FRAME = "Summarize what changed since this morning."
 
 
 def _detect_digest_period() -> str:
@@ -1412,7 +1383,8 @@ def smart_search(req: SearchRequest):
             if clean.startswith("```"):
                 clean = clean.split("\n", 1)[1].rsplit("```", 1)[0]
             parsed = json.loads(clean)
-        except (json.JSONDecodeError, IndexError):
+        except (json.JSONDecodeError, IndexError) as exc:
+            logger.warning("AI search JSON parse failed: %s — raw: %.200s", exc, result)
             return []
 
         prospect_map = {p.name.lower(): p for p in prospects}
@@ -1536,7 +1508,7 @@ def import_signals(signals: list[SignalImport]):
                 embedding=s.embedding,
                 action_window=s.action_window,
                 action_insight=s.action_insight,
-                detected_at=datetime.fromisoformat(s.detected_at) if s.detected_at else datetime.utcnow(),
+                detected_at=datetime.fromisoformat(s.detected_at) if s.detected_at else _utcnow(),
             )
             session.add(obj)
             inserted += 1

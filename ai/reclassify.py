@@ -20,22 +20,15 @@ from database.db import get_session, init_db
 from database.models import Company, Signal
 from ai.client import get_ai_client, get_model, get_fallback_model
 
-CLASSIFICATION_PROMPT = """Classify this news headline about a company into exactly ONE category.
-Think about what this headline MEANS for the company's need for HPC/GPU data center infrastructure.
-
-Categories:
-- fundraising: Company is ACTIVELY raising money (rumored rounds, exploring IPO, seeking investors)
-- funding_completed: Company CLOSED a funding round or received investment ("raised $X", "secured $X")
-- hiring: Company is hiring infrastructure/GPU/ML/data center roles, OR expanding workforce significantly
-- ai_initiative: Company announced AI model training, launched AI products, signed compute partnerships, or is expanding AI/data center infrastructure
-- cloud_spend: Signals about cloud costs, cloud repatriation, infrastructure cost optimization
-- outgrowing: Company outgrowing current provider, complaints about capacity, switching providers, waitlist issues
-- other: Article is about lawsuits, politics, opinion pieces, executive drama, or unrelated business news that has NO bearing on compute infrastructure needs
-
-Company: {company}
-Headline: {title}
-
-Respond with ONLY a JSON object: {{"type": "one_of_the_categories", "confidence": 0.0_to_1.0}}"""
+try:
+    from private.prompts import CLASSIFICATION_PROMPT
+except ImportError:
+    CLASSIFICATION_PROMPT = (
+        "Classify this news headline into one category: fundraising, funding_completed, "
+        "hiring, ai_initiative, cloud_spend, outgrowing, other.\n\n"
+        "Company: {company}\nHeadline: {title}\n\n"
+        'Respond with ONLY a JSON object: {{"type": "category", "confidence": 0.0_to_1.0}}'
+    )
 
 
 def _classify_with_ai(client, model: str, company_name: str, title: str) -> dict | None:
@@ -62,74 +55,47 @@ def _classify_with_ai(client, model: str, company_name: str, title: str) -> dict
     return None
 
 
+try:
+    from private.collector_patterns import (
+        RECLASSIFY_NOT_RELEVANT,
+        RECLASSIFY_FUNDRAISING,
+        RECLASSIFY_FUNDING,
+        RECLASSIFY_LAYOFFS,
+        RECLASSIFY_HIRING,
+        RECLASSIFY_CLOUD,
+        RECLASSIFY_OUTGROWING,
+        RECLASSIFY_AI,
+    )
+except ImportError:
+    RECLASSIFY_NOT_RELEVANT = ["lawsuit", "sued", "opinion", "editorial"]
+    RECLASSIFY_FUNDRAISING = ["seeking", "fundrais", "exploring ipo"]
+    RECLASSIFY_FUNDING = ["raises", "raised", "secured", "series"]
+    RECLASSIFY_LAYOFFS = ["layoff", "laid off", "job cuts"]
+    RECLASSIFY_HIRING = ["hiring", "hires", "recruit", "engineer"]
+    RECLASSIFY_CLOUD = ["cloud cost", "cloud spend", "repatri"]
+    RECLASSIFY_OUTGROWING = ["outgrow", "switch", "migrat"]
+    RECLASSIFY_AI = ["data center", "gpu", "ai infrastructure", "compute"]
+
+
 def _classify_with_keywords(title: str) -> str:
     """Keyword-based fallback — fast and free."""
     t = title.lower()
 
-    not_relevant_patterns = [
-        "lawsuit", "sued", "suing", "deposition", "testimony",
-        "criminal", "antitrust", "regulation", "ban", "bans",
-        "opinion", "editorial", "musk bashes", "controversy",
-        "stock price", "analyst rating", "buy rating", "sell rating",
-        "earnings call", "quarterly results",
-    ]
-    if any(p in t for p in not_relevant_patterns):
+    if any(p in t for p in RECLASSIFY_NOT_RELEVANT):
         return "other"
-
-    fundraising_patterns = [
-        "seeking", "in talks to raise", "exploring ipo", "fundrais",
-        "plans to go public", "considering offering", "roadshow",
-    ]
-    if any(p in t for p in fundraising_patterns):
+    if any(p in t for p in RECLASSIFY_FUNDRAISING):
         return "fundraising"
-
-    funding_patterns = [
-        "raises", "raised", "secures", "secured", "closes", "closed",
-        "$", "billion", "million", "funding round", "series",
-        "investment from", "backed by", "led by",
-    ]
-    if any(p in t for p in funding_patterns):
+    if any(p in t for p in RECLASSIFY_FUNDING):
         return "funding_completed"
-
-    layoff_patterns = [
-        "layoff", "lay off", "laid off", "lays off", "job cuts",
-        "workforce reduction", "downsiz",
-    ]
-    if any(p in t for p in layoff_patterns):
+    if any(p in t for p in RECLASSIFY_LAYOFFS):
         return "other"
-
-    hiring_patterns = [
-        "hiring", "hires", "hire", "job", "recruit", "workforce",
-        "headcount", "engineer", "permanent jobs",
-        "construction jobs", "sre", "mlops", "ml engineer",
-    ]
-    if any(p in t for p in hiring_patterns):
+    if any(p in t for p in RECLASSIFY_HIRING):
         return "hiring"
-
-    cloud_patterns = [
-        "cloud cost", "cloud spend", "repatri", "optimize",
-        "cost reduction", "cloud bill", "egress",
-    ]
-    if any(p in t for p in cloud_patterns):
+    if any(p in t for p in RECLASSIFY_CLOUD):
         return "cloud_spend"
-
-    outgrowing_patterns = [
-        "outgrow", "switch", "migrat", "waitlist", "shortage",
-        "capacity constraint", "moving away from",
-    ]
-    if any(p in t for p in outgrowing_patterns):
+    if any(p in t for p in RECLASSIFY_OUTGROWING):
         return "outgrowing"
-
-    ai_patterns = [
-        "data center", "datacenter", "gpu", "ai infrastructure",
-        "model training", "ai cloud", "compute", "chip", "semiconductor",
-        "nvidia", "server", "liquid cooling", "power", "megawatt",
-        "gw", "mw ", "facility", "campus", "supercomputer",
-        "partnership", "contract", "deal", "agreement",
-        "ai model", "llm", "foundation model", "inference",
-        "expansion", "build", "construction", "new site",
-    ]
-    if any(p in t for p in ai_patterns):
+    if any(p in t for p in RECLASSIFY_AI):
         return "ai_initiative"
 
     return "other"

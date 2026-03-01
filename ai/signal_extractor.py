@@ -6,28 +6,17 @@ import json
 
 from ai.client import get_ai_client, get_bulk_model
 
-SYSTEM_PROMPT = """You are a signal classifier for a sales intelligence platform at Iren, 
-an HPC data center company.
-
-Given a news article title and optional content, classify it into exactly ONE signal type 
-and extract structured data.
-
-Signal types:
-- fundraising: Company is ACTIVELY raising money (rumors, "seeking funding", "in talks", "exploring IPO")
-- funding_completed: Company CLOSED a funding round (announced raise, "raised $X", "secured $X")
-- hiring: Company is hiring infrastructure/GPU/ML/data center roles
-- ai_initiative: Company announced AI product, model training, compute partnership, or expansion
-- cloud_spend: Signals about cloud costs, cloud repatriation, infrastructure cost optimization
-- outgrowing: Company outgrowing current provider, complaints about capacity, switching providers
-- other: Article does not fit any of the above signal types
-
-Respond with ONLY valid JSON:
-{
-    "signal_type": "one of the types above",
-    "magnitude": number (dollar amount if funding, 1.0 otherwise),
-    "confidence": number between 0 and 1,
-    "key_facts": "1-2 sentence extraction of key facts"
-}"""
+try:
+    from private.prompts import SIGNAL_EXTRACTOR_PROMPT as SYSTEM_PROMPT
+except ImportError:
+    SYSTEM_PROMPT = (
+        "You are a signal classifier for a sales intelligence platform.\n\n"
+        "Classify articles into one signal type and extract structured data.\n"
+        "Signal types: fundraising, funding_completed, hiring, ai_initiative, "
+        "cloud_spend, outgrowing, other.\n\n"
+        "Respond with ONLY valid JSON:\n"
+        '{"signal_type": "...", "magnitude": number, "confidence": 0-1, "key_facts": "..."}'
+    )
 
 
 def extract_signal(title: str, content: str = "", company_name: str = "") -> dict:
@@ -71,35 +60,33 @@ def extract_signal(title: str, content: str = "", company_name: str = "") -> dic
     return _fallback_extraction(title)
 
 
+try:
+    from private.collector_patterns import FALLBACK_EXTRACTION_KEYWORDS as _FALLBACK_KW
+except ImportError:
+    _FALLBACK_KW = {
+        "fundraising": ["raising", "fundrais", "seed round"],
+        "funding_completed": ["raised", "raises", "secured", "series"],
+        "hiring": ["hiring", "hires", "job", "recruit"],
+        "ai_initiative": ["gpu", "ai", "infrastructure", "data center"],
+        "cloud_spend": ["cloud cost", "cloud spend", "egress"],
+        "outgrowing": ["outgrow", "switch", "migrat"],
+    }
+
+_CONFIDENCE = {"fundraising": 0.4, "funding_completed": 0.4, "hiring": 0.4,
+               "ai_initiative": 0.3, "cloud_spend": 0.3, "outgrowing": 0.3}
+
+
 def _fallback_extraction(title: str) -> dict:
     """Keyword-based fallback classification when no API key is set."""
     title_lower = title.lower()
 
-    if any(kw in title_lower for kw in [
-        "raising", "seeks", "exploring ipo", "fundrais", "in talks",
-        "seed round", "pre-seed", "bridge round", "growth round",
-    ]):
-        return {"signal_type": "fundraising", "magnitude": 1.0, "confidence": 0.4, "key_facts": title}
-    if any(kw in title_lower for kw in [
-        "raised", "raises", "secured", "closes", "series", "funding round",
-    ]):
-        return {"signal_type": "funding_completed", "magnitude": 1.0, "confidence": 0.4, "key_facts": title}
-    if any(kw in title_lower for kw in [
-        "hiring", "hires", "job", "recruit", "engineer", "sre", "mlops",
-    ]):
-        return {"signal_type": "hiring", "magnitude": 1.0, "confidence": 0.4, "key_facts": title}
-    if any(kw in title_lower for kw in [
-        "gpu", "model", "training", "ai", "infrastructure", "data center",
-    ]):
-        return {"signal_type": "ai_initiative", "magnitude": 1.0, "confidence": 0.3, "key_facts": title}
-    if any(kw in title_lower for kw in [
-        "cloud cost", "repatriat", "cloud spend", "cloud bill", "egress",
-    ]):
-        return {"signal_type": "cloud_spend", "magnitude": 1.0, "confidence": 0.3, "key_facts": title}
-    if any(kw in title_lower for kw in [
-        "outgrow", "switch", "migrat", "waitlist", "capacity constraint",
-        "oversubscribed",
-    ]):
-        return {"signal_type": "outgrowing", "magnitude": 1.0, "confidence": 0.3, "key_facts": title}
+    for sig_type, keywords in _FALLBACK_KW.items():
+        if any(kw in title_lower for kw in keywords):
+            return {
+                "signal_type": sig_type,
+                "magnitude": 1.0,
+                "confidence": _CONFIDENCE.get(sig_type, 0.3),
+                "key_facts": title,
+            }
 
     return {"signal_type": "other", "magnitude": 0, "confidence": 0.1, "key_facts": ""}

@@ -20,37 +20,16 @@ from database.models import Company
 
 GOOGLE_NEWS_RSS = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
 
-FUNDRAISING_PATTERNS = [
-    r"seeking\s+(series|funding|investment|capital)",
-    r"in\s+talks?\s+(to|for)\s+rais",
-    r"looking\s+to\s+raise",
-    r"fundrais",
-    r"exploring.*ipo",
-    r"plans?\s+to\s+go\s+public",
-    r"considering.*offering",
-    r"preparing.*ipo",
-    r"roadshow",
-    r"pre.?seed",
-    r"seed\s+round",
-    r"bridge\s+(round|funding|loan)",
-    r"growth\s+round",
-    r"extension\s+round",
-]
-
-COMPLETED_FUNDING_PATTERNS = [
-    r"raises?\s+\$[\d,.]+\s*(million|billion|m|b|mn|bn)",
-    r"raised\s+\$[\d,.]+",
-    r"secures?\s+\$[\d,.]+",
-    r"secured\s+\$[\d,.]+",
-    r"closes?\s+\$[\d,.]+.*round",
-    r"closed\s+\$[\d,.]+",
-    r"series\s+[a-g]\s+(round|funding)",
-    r"funding\s+round",
-    r"venture\s+capital",
-    r"valued\s+at\s+\$[\d,.]+",
-    r"debt\s+facility",
-    r"credit\s+facility",
-]
+try:
+    from private.collector_patterns import FUNDRAISING_PATTERNS, COMPLETED_FUNDING_PATTERNS
+except ImportError:
+    FUNDRAISING_PATTERNS = [
+        r"fundrais", r"exploring.*ipo", r"seed\s+round", r"seeking\s+(series|funding)",
+    ]
+    COMPLETED_FUNDING_PATTERNS = [
+        r"raises?\s+\$[\d,.]+", r"raised\s+\$[\d,.]+", r"secured\s+\$[\d,.]+",
+        r"series\s+[a-g]\s+(round|funding)", r"funding\s+round",
+    ]
 
 AMOUNT_PATTERN = re.compile(
     r"\$\s*([\d,.]+)\s*(million|billion|m|b|mn|bn|M|B|MM|BB)", re.IGNORECASE
