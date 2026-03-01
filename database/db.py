@@ -18,11 +18,13 @@ engine = create_engine(DATABASE_URL, echo=False, connect_args=_connect_args)
 SessionLocal = sessionmaker(bind=engine)
 
 
-def _enable_wal(conn, _):
-    """Enable WAL journal mode to allow concurrent reads/writes."""
+def _enable_wal(dbapi_conn, _):
+    """Enable WAL journal mode and set busy timeout on every new connection."""
     if DATABASE_URL.startswith("sqlite"):
-        conn.execute(text("PRAGMA journal_mode=WAL"))
-        conn.execute(text("PRAGMA busy_timeout=10000"))
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=10000")
+        cursor.close()
 
 
 if DATABASE_URL.startswith("sqlite"):
