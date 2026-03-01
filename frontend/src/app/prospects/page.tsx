@@ -205,13 +205,19 @@ function ProspectsPageInner() {
     setEmail(null)
     setCompContext(null)
     setDetailLoading(true)
+    setBriefLoading(true)
     try {
       const d = await getProspect(id)
       setDetail(d)
       getCompetitiveContext(id).then(setCompContext).catch(() => {})
+      generateBrief(id)
+        .then((res) => setBrief(res.brief))
+        .catch(() => setBrief("Failed to generate brief."))
+        .finally(() => setBriefLoading(false))
     } catch (err) {
       console.error("Failed to load prospect detail:", err)
       setDetailError(true)
+      setBriefLoading(false)
     } finally {
       setDetailLoading(false)
     }
@@ -420,7 +426,7 @@ function ProspectsPageInner() {
                       className="gap-1.5 transition-transform active:scale-[0.97]"
                     >
                       {briefLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                      Generate Brief
+                      {brief ? "Regenerate Brief" : briefLoading ? "Generating…" : "Generate Brief"}
                     </Button>
                     <Button
                       size="sm"
@@ -435,6 +441,14 @@ function ProspectsPageInner() {
                   </div>
 
                   {/* 3. Brief/Email output inline */}
+                  {briefLoading && !brief && (
+                    <div className="mt-3 rounded-md border border-border/50 bg-muted/20 p-4 space-y-2">
+                      <p className="text-xs font-semibold text-foreground/80 mb-2">Sales Brief</p>
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-5/6" />
+                      <Skeleton className="h-3 w-4/6" />
+                    </div>
+                  )}
                   {brief && (
                     <div className="mt-3 rounded-md border border-border/50 bg-muted/20 p-4">
                       <p className="text-xs font-semibold text-foreground/80 mb-2">Sales Brief</p>
