@@ -1007,35 +1007,63 @@ def _competitive_pulse(session) -> dict:
 
 
 DIGEST_SYSTEM_MSG = (
-    "You are Iren's CRO writing the brief your VP of Sales reads before the team standup.\n\n"
+    "You are Iren's market intelligence desk. You produce the daily signal digest "
+    "that lands in the commercial team's inbox — the kind of brief their market "
+    "research and GTM research teams would send.\n\n"
     + _build_iren_context()
     + "\n\n"
-    "YOUR JOB: You care about EVERY deal — a $2M AI Cloud contract from a growth startup "
-    "matters because they will grow. You are building a book of business, not cherry-picking logos.\n\n"
+    "VOICE: Authoritative, informed, concise. You report, contextualize, and surface "
+    "implications. You do not issue directives or assign tasks — but you do connect "
+    "the dots between signals and what they mean for Iren's pipeline. When a signal "
+    "has a clear engagement window or product fit, say so.\n\n"
+    "FORMAT: Up to 3 themed sections. Each section has a short **bold theme name** "
+    "followed by a paragraph or a few bullet points — whichever communicates the "
+    "information most clearly. Use bullets for lists of signals or movers; use prose "
+    "for narrative context or implications. Separate sections with a blank line.\n\n"
+    "DATA USAGE:\n"
+    "- The data includes a ranked pipeline, individual signals with urgency and timing "
+    "windows, score movers with category breakdowns, competitive events, and key contacts.\n"
+    "- Use tier labels (VERY HIGH, HIGH, etc.) when referencing prospects.\n"
+    "- Cite engagement windows when they add urgency context (e.g. '30-120 day window').\n"
+    "- Connect every signal to the relevant Iren product (AI Cloud, Colo, or BTS).\n"
+    "- Name the stakeholder contact when one is provided for a rising prospect.\n"
+    "- Note what score category is driving movement, not just the total.\n\n"
     "RULES:\n"
-    "1. Cover the full funnel. One sentence on early/growth-stage activity, one on enterprise, "
-    "one action item. If a competitive threat displaces one, cut the weakest.\n"
-    "2. Name names. Never say 'several companies.'\n"
-    "3. Connect signals to Iren products. Hiring at an AI lab = future GPU demand (AI Cloud). "
-    "Cloud spend at an enterprise = colo opportunity.\n"
-    "4. Give the VP something to DO. Not 'monitor closely' — 'get [name] on the phone "
-    "because [reason].'\n"
-    "5. Prose only. No headers, no bullets, no bold. 3-4 sentences."
+    "1. Name names. Never say 'several companies' or 'multiple prospects.'\n"
+    "2. Surface implications, not commands. 'CoreWeave's VERY HIGH score and 30-120 day "
+    "funding window make them a strong AI Cloud candidate this quarter' is good. "
+    "'Call CoreWeave today' is not your job.\n"
+    "3. Choose themes that match the data. Likely themes: pipeline movement, capital and "
+    "infrastructure signals, competitive landscape — but adapt to what's material.\n"
+    "4. Skip a theme if the data doesn't warrant it. Two strong sections beat three thin ones."
 )
 
 MORNING_FRAME = (
-    "Here's the overnight data. Write my morning brief — what happened, "
-    "who moved, and what the team should do first today."
+    "Here is the overnight data. Summarize what happened, "
+    "who moved, and what it means for Iren's pipeline."
 )
 AFTERNOON_FRAME = (
-    "Here's what moved since this morning. Write my afternoon update — "
-    "what changed, whose priority shifted, and how to close the day strong."
+    "Here is what moved since this morning. Summarize "
+    "what changed, whose priority shifted, and any emerging patterns."
 )
 
 
 def _detect_digest_period() -> str:
     """Return 'morning' or 'afternoon' based on current UTC hour."""
     return "morning" if datetime.now(timezone.utc).hour < 14 else "afternoon"
+
+
+def _score_category_leaders(score: ProspectScore) -> list[tuple[str, float, float]]:
+    """Return score categories sorted by contribution, as (name, value, max)."""
+    cats = [
+        ("fundraising", score.fundraising_score, SIGNAL_WEIGHTS["fundraising"]["max_points"]),
+        ("funding_completed", score.funding_completed_score, SIGNAL_WEIGHTS["funding_completed"]["max_points"]),
+        ("hiring", score.hiring_score, SIGNAL_WEIGHTS["hiring"]["max_points"]),
+        ("ai_initiative", score.ai_initiative_score, SIGNAL_WEIGHTS["ai_initiative"]["max_points"]),
+        ("cloud_spend", score.cloud_spend_score, SIGNAL_WEIGHTS["cloud_spend"]["max_points"]),
+        ("outgrowing", score.outgrowing_score, SIGNAL_WEIGHTS["outgrowing"]["max_points"]),
+    ]
+    return sorted(cats, key=lambda c: c[1], reverse=True)
 
 
 def _build_digest_context(session, period: str) -> str:
@@ -1066,6 +1094,7 @@ def _build_digest_context(session, period: str) -> str:
 
     score_map = get_latest_scores(session)
     deltas = get_score_deltas(session)
+    all_scores = [s.total_score for s in score_map.values() if s.total_score > 0]
 
     movers = sum(1 for d in deltas.values() if abs(d) > 0.1)
     period_label = "overnight" if period == "morning" else "today"
@@ -1073,17 +1102,36 @@ def _build_digest_context(session, period: str) -> str:
     lines = [
         f"PIPELINE SNAPSHOT ({now.strftime('%Y-%m-%d')} {period}):",
         f"  {len(prospects)} prospects tracked | {movers} with score movement | {len(signals)} active signals",
-        "",
-        f"SIGNALS ({period_label}):",
     ]
 
-    def _sort_key(sig):
-        comp = all_companies.get(sig.company_id)
-        if not comp:
-            return 0
-        return comp.total_funding or 0
+    # --- TOP PIPELINE (ranked leaderboard) ---
+    ranked = sorted(
+        [(p, score_map.get(p.id)) for p in prospects if score_map.get(p.id) and score_map[p.id].total_score > 0],
+        key=lambda x: x[1].total_score,
+        reverse=True,
+    )[:7]
+    if ranked:
+        lines.append("")
+        lines.append("TOP PIPELINE:")
+        for i, (p, score) in enumerate(ranked, 1):
+            tier = _tier_label(score.total_score, all_scores)
+            pfit = PRODUCT_FIT_LABELS.get(p.product_fit or "", p.product_fit or "")
+            delta = deltas.get(p.id, 0.0)
+            cats = _score_category_leaders(score)
+            top_cat = f"{cats[0][0]} ({cats[0][1]:.1f}/{cats[0][2]:.0f})" if cats[0][1] > 0 else ""
+            delta_str = f" ({delta:+.1f})" if abs(delta) > 0.1 else ""
+            lines.append(f"  {i}. {p.name} — {score.total_score:.1f}{delta_str} {tier} — {pfit} — led by {top_cat}")
 
-    for s in sorted(signals[:30], key=_sort_key):
+    # --- SIGNALS with urgency + timing windows ---
+    lines.append("")
+    lines.append(f"SIGNALS ({period_label}):")
+
+    def _sort_key(sig):
+        urgency_order = {"URGENT": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+        return urgency_order.get(get_urgency(sig.signal_type), 3)
+
+    top_signals = sorted(signals[:30], key=_sort_key)
+    for idx, s in enumerate(top_signals):
         comp = all_companies.get(s.company_id)
         if not comp:
             continue
@@ -1093,8 +1141,16 @@ def _build_digest_context(session, period: str) -> str:
         funding = f"${comp.total_funding / 1e6:.0f}M raised" if comp.total_funding else ""
         meta_parts = [p for p in [stage, size, pfit, funding] if p]
         meta = f" ({', '.join(meta_parts)})" if meta_parts else ""
-        lines.append(f"  [{s.signal_type}] {comp.name}{meta}: {s.title[:120]}")
 
+        urgency = get_urgency(s.signal_type)
+        timing = TIMING_WINDOWS.get(s.signal_type)
+        window_str = f" — {timing['window']} window" if timing else ""
+        lines.append(f"  [{s.signal_type}] {urgency} {comp.name}{meta}: {s.title[:120]}{window_str}")
+
+        if idx < 5 and s.summary:
+            lines.append(f"    → {s.summary[:100]}")
+
+    # --- SCORE MOVERS with tier, product fit, category breakdown ---
     up_movers = sorted(
         [(cid, d) for cid, d in deltas.items() if d > 0.1],
         key=lambda x: -x[1],
@@ -1107,26 +1163,55 @@ def _build_digest_context(session, period: str) -> str:
     lines.append("")
     lines.append("SCORE MOVERS:")
     if up_movers:
-        parts = []
+        lines.append("  UP:")
         for cid, d in up_movers:
             comp = all_companies.get(cid)
             score = score_map.get(cid)
             if comp and score:
-                parts.append(f"{comp.name} {score.total_score:.1f} ({d:+.1f})")
-        if parts:
-            lines.append(f"  UP:   {' | '.join(parts)}")
+                tier = _tier_label(score.total_score, all_scores)
+                pfit = PRODUCT_FIT_LABELS.get(comp.product_fit or "", comp.product_fit or "")
+                cats = _score_category_leaders(score)
+                top2 = ", ".join(f"{c[0]} ({c[1]:.1f}/{c[2]:.0f})" for c in cats[:2] if c[1] > 0)
+                lines.append(f"    {comp.name} {score.total_score:.1f} ({d:+.1f}) {tier} — {pfit} — driven by {top2}")
     if down_movers:
-        parts = []
+        lines.append("  DOWN:")
         for cid, d in down_movers:
             comp = all_companies.get(cid)
             score = score_map.get(cid)
             if comp and score:
-                parts.append(f"{comp.name} {score.total_score:.1f} ({d:+.1f})")
-        if parts:
-            lines.append(f"  DOWN: {' | '.join(parts)}")
+                tier = _tier_label(score.total_score, all_scores)
+                pfit = PRODUCT_FIT_LABELS.get(comp.product_fit or "", comp.product_fit or "")
+                lines.append(f"    {comp.name} {score.total_score:.1f} ({d:+.1f}) {tier} — {pfit}")
     if not up_movers and not down_movers:
         lines.append("  No significant movement this period.")
 
+    # --- KEY CONTACTS for rising prospects ---
+    if up_movers:
+        mover_ids = [cid for cid, _ in up_movers[:3]]
+        contacts = (
+            session.query(Contact)
+            .filter(Contact.company_id.in_(mover_ids))
+            .all()
+        )
+        if contacts:
+            seniority_order = {"c_suite": 0, "vp": 1, "director": 2}
+            by_company: dict[int, list[Contact]] = {}
+            for c in contacts:
+                by_company.setdefault(c.company_id, []).append(c)
+
+            lines.append("")
+            lines.append("KEY CONTACTS (rising prospects):")
+            for cid in mover_ids:
+                comp = all_companies.get(cid)
+                company_contacts = by_company.get(cid, [])
+                if not comp or not company_contacts:
+                    continue
+                company_contacts.sort(key=lambda c: seniority_order.get(c.seniority, 99))
+                best = company_contacts[0]
+                name_part = best.name if best.name else "unnamed"
+                lines.append(f"  {comp.name}: {name_part}, {best.title} ({best.role_type})")
+
+    # --- COMPETITIVE PULSE ---
     comp_events = (
         session.query(CompetitorEvent)
         .filter(CompetitorEvent.detected_at >= (now - timedelta(days=7)))
@@ -1140,7 +1225,8 @@ def _build_digest_context(session, period: str) -> str:
         for e in comp_events:
             comp = all_companies.get(e.company_id)
             name = comp.name if comp else "Unknown"
-            lines.append(f"  {name}: {e.title[:150]}")
+            threat = f" [threat: {comp.threat_level}]" if comp and comp.threat_level else ""
+            lines.append(f"  {name}{threat}: {e.title[:150]}")
 
     return "\n".join(lines)
 
@@ -1174,7 +1260,7 @@ def dashboard_digest(period: str | None = Query(None)):
             {"role": "system", "content": DIGEST_SYSTEM_MSG},
             {"role": "user", "content": f"{frame}\n\n{context_block}"},
         ]
-        result = call_premium(client, messages, max_tokens=400, temperature=0.3)
+        result = call_premium(client, messages, max_tokens=1400, temperature=0.3)
 
         if result:
             brief = ProspectBrief(company_id=None, brief_text=result, brief_type=brief_type)
@@ -1193,20 +1279,73 @@ def dashboard_digest(period: str | None = Query(None)):
 class BriefRequest(BaseModel):
     company_id: int
 
+def _get_cached_brief(session, company_id: int, brief_type: str) -> str | None:
+    """Return cached brief text if it is still fresh (generated after last scoring run)."""
+    cached = (
+        session.query(ProspectBrief)
+        .filter(ProspectBrief.company_id == company_id, ProspectBrief.brief_type == brief_type)
+        .order_by(ProspectBrief.generated_at.desc())
+        .first()
+    )
+    if not cached:
+        return None
+    latest_score = (
+        session.query(ProspectScore)
+        .filter(ProspectScore.company_id == company_id)
+        .order_by(ProspectScore.scored_at.desc())
+        .first()
+    )
+    if latest_score and latest_score.scored_at:
+        scored_at = latest_score.scored_at.replace(tzinfo=timezone.utc) if latest_score.scored_at.tzinfo is None else latest_score.scored_at
+        generated_at = cached.generated_at.replace(tzinfo=timezone.utc) if cached.generated_at.tzinfo is None else cached.generated_at
+        if scored_at > generated_at:
+            return None
+    return cached.brief_text
+
+
+def _save_brief(session, company_id: int, brief_type: str, text: str) -> None:
+    session.add(ProspectBrief(company_id=company_id, brief_text=text, brief_type=brief_type))
+    session.commit()
+
+
 @app.post("/api/briefs/generate")
 def gen_brief(req: BriefRequest):
-    text = generate_brief(req.company_id)
-    return {"brief": text, "company_id": req.company_id}
+    session = get_session()
+    try:
+        cached = _get_cached_brief(session, req.company_id, "sales_brief")
+        if cached:
+            return {"brief": cached, "company_id": req.company_id, "cached": True}
+        text = generate_brief(req.company_id)
+        _save_brief(session, req.company_id, "sales_brief", text)
+        return {"brief": text, "company_id": req.company_id, "cached": False}
+    finally:
+        session.close()
 
 @app.post("/api/briefs/email")
 def gen_email(req: BriefRequest):
-    text = generate_outreach_email(req.company_id)
-    return {"email": text, "company_id": req.company_id}
+    session = get_session()
+    try:
+        cached = _get_cached_brief(session, req.company_id, "outreach_email")
+        if cached:
+            return {"email": cached, "company_id": req.company_id, "cached": True}
+        text = generate_outreach_email(req.company_id)
+        _save_brief(session, req.company_id, "outreach_email", text)
+        return {"email": text, "company_id": req.company_id, "cached": False}
+    finally:
+        session.close()
 
 @app.post("/api/briefs/battlecard")
 def gen_battlecard(req: BriefRequest):
-    text = generate_battle_card(req.company_id)
-    return {"battlecard": text, "company_id": req.company_id}
+    session = get_session()
+    try:
+        cached = _get_cached_brief(session, req.company_id, "battlecard")
+        if cached:
+            return {"battlecard": cached, "company_id": req.company_id, "cached": True}
+        text = generate_battle_card(req.company_id)
+        _save_brief(session, req.company_id, "battlecard", text)
+        return {"battlecard": text, "company_id": req.company_id, "cached": False}
+    finally:
+        session.close()
 
 
 # ---------------------------------------------------------------------------
