@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { getDashboard, getDashboardDigest, getSignals } from "@/lib/api"
 import type { DashboardData, Signal } from "@/lib/types"
 import { cn, TIER_COLORS } from "@/lib/utils"
@@ -53,6 +54,7 @@ function DashboardSkeleton() {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [data, setData] = useState<DashboardData | null>(null)
   const [digest, setDigest] = useState<string | null>(null)
   const [digestPeriod, setDigestPeriod] = useState<string>(() =>
@@ -282,8 +284,9 @@ export default function DashboardPage() {
                       return (
                         <tr
                           key={p.id}
+                          onClick={() => router.push(`/prospects?id=${p.id}`)}
                           className={cn(
-                            "border-b border-border/30 last:border-0 transition-colors hover:bg-muted/20",
+                            "border-b border-border/30 last:border-0 transition-colors hover:bg-muted/20 cursor-pointer",
                             p.urgency === "URGENT" && "border-l-2 border-l-red-400",
                             p.urgency === "HIGH" && "border-l-2 border-l-orange-400",
                             p.urgency === "MEDIUM" && "border-l-2 border-l-amber-400/50",
@@ -291,7 +294,7 @@ export default function DashboardPage() {
                         >
                           <td className="py-2.5 pl-3 pr-4">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium">{p.name}</span>
+                              <span className="font-medium hover:text-[#22c55e] transition-colors">{p.name}</span>
                               <ProductBadge productFit={p.product_fit} />
                             </div>
                             <p className="text-xs text-muted-foreground">{p.industry}</p>
