@@ -1279,7 +1279,7 @@ def dashboard_digest(period: str | None = Query(None), force: bool = Query(False
             {"role": "system", "content": DIGEST_SYSTEM_MSG},
             {"role": "user", "content": f"{frame}\n\n{context_block}"},
         ]
-        result = call_premium(client, messages, max_tokens=2400, temperature=0.3)
+        result = call_with_fallback(client, messages, max_tokens=2400, temperature=0.3)
 
         if result:
             brief = ProspectBrief(company_id=None, brief_text=result, brief_type=brief_type)

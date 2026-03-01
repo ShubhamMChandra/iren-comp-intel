@@ -275,6 +275,17 @@ export default function DashboardPage() {
                   h3: ({ children }) => (
                     <p className="font-semibold text-foreground/70 text-xs uppercase tracking-wide mt-2">{children}</p>
                   ),
+                  table: ({ children }) => (
+                    <div className="overflow-x-auto my-2">
+                      <table className="w-full text-[12px] border-collapse">{children}</table>
+                    </div>
+                  ),
+                  th: ({ children }) => (
+                    <th className="text-left text-[10px] font-semibold uppercase tracking-wider text-foreground/50 pb-1 pr-4 border-b border-border/40">{children}</th>
+                  ),
+                  td: ({ children }) => (
+                    <td className="py-1 pr-4 align-top text-foreground/80">{children}</td>
+                  ),
                 }}
               >
                 {digest}
