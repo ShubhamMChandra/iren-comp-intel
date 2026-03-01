@@ -127,7 +127,7 @@ class VEDPCollector(BaseCollector):
     def _fetch_rss_entries(self) -> list[dict]:
         """Fetch press releases from VEDP RSS feed."""
         try:
-            feed = feedparser.parse(VEDP_RSS_URL)
+            feed = self.fetch_feed(VEDP_RSS_URL)
             entries = []
             for item in feed.entries:
                 link = item.get("link", "")

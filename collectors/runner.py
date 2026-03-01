@@ -50,7 +50,7 @@ COLLECTORS = {
 
 
 def run_collectors(names: list[str] | None = None):
-    """Run specified collectors (or all if none specified)."""
+    """Run specified collectors (or all if none specified), then reclassify."""
     init_db()
 
     to_run = names or list(COLLECTORS.keys())
@@ -76,7 +76,13 @@ def run_collectors(names: list[str] | None = None):
         print(f"[{name}] Completed in {elapsed:.1f}s")
 
     print("\n" + "=" * 60)
-    print("Collection complete.")
+    print("Collection complete. Running signal reclassification...")
+    try:
+        from ai.reclassify import reclassify_signals
+        reclassify_signals(dry_run=False, use_ai=False)
+    except Exception as e:
+        print(f"[reclassify] FAILED: {e}")
+    print("Done.")
 
 
 if __name__ == "__main__":

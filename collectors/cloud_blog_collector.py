@@ -41,7 +41,7 @@ class CloudBlogCollector(BaseCollector):
         self.finish()
 
     def _process_feed(self, feed_url: str, prospects: list[Company]) -> None:
-        feed = feedparser.parse(feed_url)
+        feed = self.fetch_feed(feed_url)
 
         for entry in feed.entries[:30]:
             try:

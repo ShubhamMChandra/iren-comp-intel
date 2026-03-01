@@ -4,6 +4,9 @@
 
 from datetime import datetime, timezone
 
+import feedparser
+import requests
+
 from ai.embeddings import (
     deserialize_embedding,
     get_embedding,
@@ -12,6 +15,20 @@ from ai.embeddings import (
 )
 from database.db import get_session
 from database.models import Signal
+
+
+_FETCH_TIMEOUT = 8
+_FETCH_HEADERS = {"User-Agent": "IrenIntel/1.0 (research platform)"}
+
+
+def fetch_feed(url: str) -> feedparser.FeedParserDict:
+    """Fetch an RSS/Atom feed with a hard timeout. Returns empty dict on failure."""
+    try:
+        resp = requests.get(url, timeout=_FETCH_TIMEOUT, headers=_FETCH_HEADERS)
+        resp.raise_for_status()
+        return feedparser.parse(resp.text)
+    except Exception:
+        return feedparser.FeedParserDict()
 
 
 class BaseCollector:
@@ -23,6 +40,10 @@ class BaseCollector:
         self.session = get_session()
         self.signals_created = 0
         self.semantic_dupes_caught = 0
+
+    def fetch_feed(self, url: str) -> feedparser.FeedParserDict:
+        """Fetch an RSS/Atom feed with a hard timeout."""
+        return fetch_feed(url)
 
     def collect(self):
         """Override in subclasses. Main entry point for data collection."""

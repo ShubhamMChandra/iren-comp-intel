@@ -56,7 +56,6 @@ NEWS_RSS_FEEDS = [
     "https://www.datacenterdynamics.com/en/rss/",
     "https://www.datacenterknowledge.com/rss.xml",
     "https://techcrunch.com/category/artificial-intelligence/feed/",
-    "https://www.reuters.com/technology/rss",
 ]
 
 GOOGLE_NEWS_BASE = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"

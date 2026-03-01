@@ -47,7 +47,7 @@ class ArXivCollector(BaseCollector):
             f"search_query={query}&sortBy=submittedDate"
             f"&sortOrder=descending&max_results=10"
         )
-        feed = feedparser.parse(url)
+        feed = self.fetch_feed(url)
 
         for entry in feed.entries:
             try:

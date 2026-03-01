@@ -85,7 +85,7 @@ class FundingCollector(BaseCollector):
         for query in queries:
             try:
                 url = GOOGLE_NEWS_RSS.format(query=quote(query))
-                feed = feedparser.parse(url)
+                feed = self.fetch_feed(url)
 
                 for entry in feed.entries[:8]:
                     title = entry.get("title", "")

@@ -77,7 +77,7 @@ class PressReleaseCollector(BaseCollector):
 
         for feed_url in PRESS_RELEASE_FEEDS:
             try:
-                feed = feedparser.parse(feed_url)
+                feed = self.fetch_feed(feed_url)
                 for entry in feed.entries[:50]:
                     title = entry.get("title", "")
                     summary = entry.get("summary", "")

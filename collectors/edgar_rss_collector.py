@@ -111,10 +111,13 @@ class EdgarRSSCollector(BaseCollector):
                 return
 
         url = EDGAR_ATOM_URL.format(cik=cik)
-        feed = feedparser.parse(
-            url,
-            request_headers={"User-Agent": SEC_EDGAR_USER_AGENT},
-        )
+        import requests as _req, feedparser as _fp
+        try:
+            resp = _req.get(url, timeout=8, headers={"User-Agent": SEC_EDGAR_USER_AGENT})
+            resp.raise_for_status()
+            feed = _fp.parse(resp.text)
+        except Exception:
+            feed = _fp.FeedParserDict()
 
         for entry in feed.entries[:20]:
             title = entry.get("title", "")
