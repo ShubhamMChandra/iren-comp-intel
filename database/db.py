@@ -13,8 +13,20 @@ from database.models import Base
 db_path = DATABASE_URL.replace("sqlite:///", "")
 Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
-engine = create_engine(DATABASE_URL, echo=False)
+_connect_args = {"check_same_thread": False, "timeout": 30} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, echo=False, connect_args=_connect_args)
 SessionLocal = sessionmaker(bind=engine)
+
+
+def _enable_wal(conn, _):
+    """Enable WAL journal mode to allow concurrent reads/writes."""
+    if DATABASE_URL.startswith("sqlite"):
+        conn.execute("PRAGMA journal_mode=WAL")
+
+
+if DATABASE_URL.startswith("sqlite"):
+    from sqlalchemy import event
+    event.listen(engine, "connect", _enable_wal)
 
 
 def _migrate_prospect_briefs_nullable(conn) -> None:

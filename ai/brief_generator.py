@@ -167,14 +167,18 @@ def _get_cached_brief(session, company_id: int, brief_type: str) -> str | None:
     return cached.brief_text if cached else None
 
 
-def _cache_brief(session, company_id: int, brief_type: str, text: str):
+def _cache_brief(session, company_id: int, brief_type: str, text: str) -> None:
     brief = ProspectBrief(
         company_id=company_id,
         brief_text=text,
         brief_type=brief_type,
     )
     session.add(brief)
-    session.commit()
+    try:
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        print(f"[brief_generator] cache write skipped (db contention?): {e}")
 
 
 def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 500, temperature: float = 0.4) -> str | None:
