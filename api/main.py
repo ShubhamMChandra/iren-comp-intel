@@ -1250,7 +1250,7 @@ def _build_digest_context(session, period: str) -> str:
 
 
 @app.get("/api/dashboard/digest")
-def dashboard_digest(period: str | None = Query(None)):
+def dashboard_digest(period: str | None = Query(None), force: bool = Query(False)):
     session = get_session()
     try:
         if period not in ("morning", "afternoon"):
@@ -1258,14 +1258,15 @@ def dashboard_digest(period: str | None = Query(None)):
 
         brief_type = f"{period}_digest"
         cutoff = _utcnow() - timedelta(hours=12)
-        cached = (
-            session.query(ProspectBrief)
-            .filter(ProspectBrief.brief_type == brief_type, ProspectBrief.generated_at >= cutoff)
-            .order_by(ProspectBrief.generated_at.desc())
-            .first()
-        )
-        if cached:
-            return {"digest": cached.brief_text, "period": period}
+        if not force:
+            cached = (
+                session.query(ProspectBrief)
+                .filter(ProspectBrief.brief_type == brief_type, ProspectBrief.generated_at >= cutoff)
+                .order_by(ProspectBrief.generated_at.desc())
+                .first()
+            )
+            if cached:
+                return {"digest": cached.brief_text, "period": period}
 
         context_block = _build_digest_context(session, period)
         frame = MORNING_FRAME if period == "morning" else AFTERNOON_FRAME
