@@ -113,20 +113,20 @@ function DigestAccordion({ text }: { text: string }) {
           <div key={i}>
             <button
               onClick={() => toggle(i)}
-              className="w-full flex items-center justify-between py-2 px-2.5 -mx-2.5 text-left rounded hover:bg-foreground/[0.04] active:bg-foreground/[0.07] transition-colors group min-h-[40px] cursor-pointer"
+              className="w-full flex items-center justify-start gap-1.5 py-2 px-2.5 -mx-2.5 text-left rounded hover:bg-foreground/[0.04] active:bg-foreground/[0.07] transition-colors group min-h-[40px] cursor-pointer"
             >
+              <ChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 shrink-0 transition-all duration-200",
+                  isOpen ? "text-foreground/60 rotate-180" : "text-foreground/30 group-hover:text-foreground/50"
+                )}
+              />
               <span className={cn(
-                "text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors",
-                isOpen ? "text-foreground/80" : "text-foreground/45 group-hover:text-foreground/65"
+                "text-[12px] font-bold uppercase tracking-[0.06em] transition-colors",
+                isOpen ? "text-foreground" : "text-foreground/55 group-hover:text-foreground/75"
               )}>
                 {sec.title}
               </span>
-              <ChevronDown
-                className={cn(
-                  "h-3.5 w-3.5 shrink-0 ml-2 transition-all duration-200",
-                  isOpen ? "text-foreground/50 rotate-180" : "text-foreground/20 group-hover:text-foreground/40"
-                )}
-              />
             </button>
             {/* CSS grid trick: animates height without JS measurement */}
             <div
