@@ -4,6 +4,7 @@ import type {
   CompetitiveContext,
   Competitor,
   DashboardData,
+  DealThreatsData,
   LandscapeData,
   Prospect,
   SearchResult,
@@ -61,8 +62,10 @@ async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
 
 // --- Dashboard ---
 export const getDashboard = () => fetchAPI<DashboardData>("/api/dashboard")
-export const getDashboardDigest = () =>
-  fetchAPI<{ digest: string | null }>("/api/dashboard/digest")
+export const getDashboardDigest = (period?: "morning" | "afternoon") =>
+  fetchAPI<{ digest: string | null; period: string }>(
+    `/api/dashboard/digest${period ? `?period=${period}` : ""}`,
+  )
 
 // --- Prospects ---
 export const getProspects = () => fetchAPI<Prospect[]>("/api/prospects")
@@ -70,11 +73,12 @@ export const getProspect = (id: number) =>
   fetchAPI<Prospect>(`/api/prospects/${id}`)
 
 // --- Signals ---
-export const getSignals = (opts?: { signal_type?: string; days?: number; limit?: number }) => {
+export const getSignals = (opts?: { signal_type?: string; days?: number; limit?: number; dedup?: boolean }) => {
   const params = new URLSearchParams()
   if (opts?.signal_type) params.set("signal_type", opts.signal_type)
   if (opts?.days) params.set("days", String(opts.days))
   if (opts?.limit) params.set("limit", String(opts.limit))
+  if (opts?.dedup) params.set("dedup", "true")
   const qs = params.toString()
   return fetchAPI<Signal[]>(`/api/signals${qs ? `?${qs}` : ""}`)
 }
@@ -91,6 +95,7 @@ export const getCompetitor = (id: number) =>
 export const getLandscape = () => fetchAPI<LandscapeData>("/api/compete/landscape")
 export const getCompetitiveContext = (prospectId: number) =>
   fetchAPI<CompetitiveContext>(`/api/prospects/${prospectId}/competitive-context`)
+export const getDealThreats = () => fetchAPI<DealThreatsData>("/api/compete/deal-threats")
 
 // --- Briefs (POST) ---
 export const generateBrief = (companyId: number) =>

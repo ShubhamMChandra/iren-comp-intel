@@ -1,4 +1,6 @@
 streamlit>=1.40.0
+fastapi>=0.115
+uvicorn>=0.30
 sqlalchemy>=2.0
 requests>=2.31
 beautifulsoup4>=4.12
@@ -8,3 +10,4 @@ python-dateutil>=2.9
 lxml>=5.0
 pytest>=8.0
 duckduckgo-search>=6.0
+pytrends>=4.9

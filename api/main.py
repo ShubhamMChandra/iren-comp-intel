@@ -27,8 +27,11 @@ from scoring.engine import get_latest_scores, get_score_deltas, score_all_prospe
 from scoring.weights import SIGNAL_WEIGHTS
 from scoring.timing import TIMING_WINDOWS, get_action_insight, get_urgency
 from ai.brief_generator import generate_brief, generate_outreach_email, generate_battle_card
-from ai.client import get_ai_client, call_with_fallback
+from ai.client import get_ai_client, call_premium, call_with_fallback
+from ai.brief_generator import _build_iren_context, _funding_stage, PRODUCT_FIT_LABELS
+from ai.embeddings import deserialize_embedding, cosine_similarity
 from config import (
+    CORS_ORIGINS,
     SIGNAL_TYPES,
     IREN_BENCHMARK,
     COMPETITOR_SEGMENTS,
@@ -59,16 +62,26 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
 app.add_middleware(RequestLogMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
+@app.get("/health")
+def health():
+    """Lightweight liveness check (no DB). Used by Railway healthcheck."""
+    return {"status": "ok"}
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _utcnow() -> datetime:
+    """Naive UTC datetime for SQLite comparisons (SQLite stores naive datetimes)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 def _company_dict(c: Company, score: ProspectScore | None = None, delta: float = 0.0) -> dict:
     return {
@@ -155,8 +168,10 @@ def _tier_label(score: float, all_scores: list[float]) -> str:
     if not all_scores or score == 0:
         return "DORMANT"
     sorted_scores = sorted(all_scores)
-    rank = sum(1 for s in sorted_scores if s <= score)
-    percentile = rank / len(sorted_scores)
+    n = len(sorted_scores)
+    low_rank = sum(1 for s in sorted_scores if s < score)
+    high_rank = sum(1 for s in sorted_scores if s <= score)
+    percentile = (low_rank + high_rank) / (2 * n)
     if percentile >= 0.90:
         return "VERY HIGH"
     if percentile >= 0.70:
@@ -179,10 +194,14 @@ def _top_signal_type(session, company_id: int) -> str | None:
 
 
 def _signal_counts_7d(session, company_ids: list[int]) -> dict[int, int]:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    cutoff = _utcnow() - timedelta(days=7)
     results = (
         session.query(Signal.company_id, Signal.id)
-        .filter(Signal.company_id.in_(company_ids), Signal.detected_at >= cutoff)
+        .filter(
+            Signal.company_id.in_(company_ids),
+            Signal.detected_at >= cutoff,
+            Signal.signal_type != "other",
+        )
         .all()
     )
     counts: dict[int, int] = {}
@@ -291,22 +310,58 @@ def get_prospect(prospect_id: int):
 # Signals
 # ---------------------------------------------------------------------------
 
+def _dedup_by_embedding(signals: list, same_company_threshold: float = 0.72, cross_company_threshold: float = 0.90) -> list:
+    """
+    Greedy dedup (most-recent first). Two thresholds:
+    - same_company_threshold: more aggressive — collapses multiple articles
+      about the same event within one company (e.g. 10 OpenAI $110B headlines)
+    - cross_company_threshold: looser — only drops signals from different
+      companies when they are nearly identical (rare)
+    Falls back to keeping all signals when no embeddings are stored.
+    """
+    kept: list = []
+    kept_embeddings: list[tuple[int, list[float]]] = []  # (company_id, embedding)
+    for s in signals:
+        emb = deserialize_embedding(s.embedding)
+        if emb is None:
+            kept.append(s)
+            continue
+        duplicate = False
+        for kept_company_id, kept_emb in kept_embeddings:
+            threshold = same_company_threshold if s.company_id == kept_company_id else cross_company_threshold
+            if cosine_similarity(emb, kept_emb) >= threshold:
+                duplicate = True
+                break
+        if not duplicate:
+            kept.append(s)
+            kept_embeddings.append((s.company_id, emb))
+    return kept
+
+
 @app.get("/api/signals")
 def list_signals(
     signal_type: str | None = None,
     company_id: int | None = None,
     days: int = Query(default=7, ge=1, le=365),
     limit: int = Query(default=100, ge=1, le=500),
+    dedup: bool = Query(default=False),
 ):
     session = get_session()
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        q = session.query(Signal).filter(Signal.detected_at >= cutoff, Signal.is_active == True)
+        cutoff = _utcnow() - timedelta(days=days)
+        fetch_limit = min(limit * 4, 500) if dedup else limit
+        q = session.query(Signal).filter(
+            Signal.detected_at >= cutoff,
+            Signal.is_active == True,
+            Signal.signal_type != "other",
+        )
         if signal_type:
             q = q.filter(Signal.signal_type == signal_type)
         if company_id:
             q = q.filter(Signal.company_id == company_id)
-        signals = q.order_by(Signal.detected_at.desc()).limit(limit).all()
+        signals = q.order_by(Signal.detected_at.desc()).limit(fetch_limit).all()
+        if dedup:
+            signals = _dedup_by_embedding(signals)[:limit]
         company_names = {c.id: c.name for c in session.query(Company).all()}
         return [_signal_dict(s, company_names.get(s.company_id, "")) for s in signals]
     finally:
@@ -317,10 +372,10 @@ def list_signals(
 def signal_stats(days: int = Query(default=7, ge=1, le=365)):
     session = get_session()
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = _utcnow() - timedelta(days=days)
         signals = (
             session.query(Signal)
-            .filter(Signal.detected_at >= cutoff, Signal.is_active == True)
+            .filter(Signal.detected_at >= cutoff, Signal.is_active == True, Signal.signal_type != "other")
             .all()
         )
         by_type: dict[str, int] = {}
@@ -350,7 +405,7 @@ def _derive_segment(industry: str | None) -> str:
 def list_competitors():
     session = get_session()
     try:
-        cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
+        cutoff_30d = _utcnow() - timedelta(days=30)
         competitors = session.query(Company).filter(Company.company_type == "competitor").order_by(Company.name).all()
 
         result = []
@@ -430,7 +485,7 @@ def _parse_json_field(value: str | None) -> list:
 def compete_landscape():
     session = get_session()
     try:
-        cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
+        cutoff_30d = _utcnow() - timedelta(days=30)
         competitors = session.query(Company).filter(Company.company_type == "competitor").order_by(Company.name).all()
 
         enriched = []
@@ -478,7 +533,11 @@ def compete_landscape():
         all_signals = (
             session.query(Signal)
             .join(Company)
-            .filter(Company.company_type == "competitor", Signal.detected_at >= cutoff_30d)
+            .filter(
+                Company.company_type == "competitor",
+                Signal.detected_at >= cutoff_30d,
+                Signal.signal_type != "not_relevant",
+            )
             .order_by(Signal.detected_at.desc())
             .limit(30)
             .all()
@@ -550,7 +609,7 @@ def prospect_competitive_context(prospect_id: int):
                 })
 
         comp_ids = [c["id"] for c in likely]
-        cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
+        cutoff_30d = _utcnow() - timedelta(days=30)
         recent_moves = []
         if comp_ids:
             events = (
@@ -587,6 +646,90 @@ def prospect_competitive_context(prospect_id: int):
         session.close()
 
 
+@app.get("/api/compete/deal-threats")
+def deal_threats():
+    """Cross-reference high-score prospects with competing-segment activity."""
+    session = get_session()
+    try:
+        cutoff_30d = _utcnow() - timedelta(days=30)
+
+        score_map = get_latest_scores(session)
+        all_scores = [s.total_score for s in score_map.values() if s.total_score > 0]
+        if not all_scores:
+            return {"threats": [], "total_at_risk": 0}
+
+        threshold = sorted(all_scores, reverse=True)[len(all_scores) // 3] if len(all_scores) > 3 else 0
+        high_score_ids = [cid for cid, s in score_map.items() if s.total_score >= threshold]
+
+        prospects = (
+            session.query(Company)
+            .filter(Company.id.in_(high_score_ids), Company.company_type == "prospect")
+            .all()
+        )
+
+        competitors = session.query(Company).filter(Company.company_type == "competitor").all()
+        comp_by_segment: dict[str, list[Company]] = {}
+        for c in competitors:
+            seg = _derive_segment(c.industry)
+            comp_by_segment.setdefault(seg, []).append(c)
+
+        comp_names = {c.id: c.name for c in competitors}
+
+        threats = []
+        for p in prospects:
+            pfit = p.product_fit or ""
+            relevant_segments = PRODUCT_FIT_TO_SEGMENTS.get(pfit, [])
+            if not relevant_segments:
+                continue
+
+            competing_ids = []
+            for seg in relevant_segments:
+                for c in comp_by_segment.get(seg, []):
+                    competing_ids.append(c.id)
+
+            if not competing_ids:
+                continue
+
+            recent_events = (
+                session.query(CompetitorEvent)
+                .filter(
+                    CompetitorEvent.company_id.in_(competing_ids),
+                    CompetitorEvent.detected_at >= cutoff_30d,
+                )
+                .order_by(CompetitorEvent.detected_at.desc())
+                .limit(5)
+                .all()
+            )
+
+            if not recent_events:
+                continue
+
+            score = score_map.get(p.id)
+            threats.append({
+                "prospect_id": p.id,
+                "prospect_name": p.name,
+                "product_fit": pfit,
+                "score": round(score.total_score, 1) if score else 0,
+                "tier": _tier_label(score.total_score if score else 0, all_scores),
+                "competing_segments": relevant_segments,
+                "recent_competitor_moves": [
+                    {
+                        "company_name": comp_names.get(e.company_id, "Unknown"),
+                        "event_type": e.event_type,
+                        "title": e.title,
+                        "detected_at": e.detected_at.isoformat() if e.detected_at else None,
+                    }
+                    for e in recent_events
+                ],
+            })
+
+        threats.sort(key=lambda x: x["score"], reverse=True)
+
+        return {"threats": threats, "total_at_risk": len(threats)}
+    finally:
+        session.close()
+
+
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
@@ -600,8 +743,8 @@ def dashboard():
         deltas = get_score_deltas(session)
         all_scores = [s.total_score for s in score_map.values() if s.total_score > 0]
 
-        cutoff_7d = datetime.now(timezone.utc) - timedelta(days=7)
-        cutoff_14d = datetime.now(timezone.utc) - timedelta(days=14)
+        cutoff_7d = _utcnow() - timedelta(days=7)
+        cutoff_14d = _utcnow() - timedelta(days=14)
 
         actionable_signals_7d = (
             session.query(Signal)
@@ -707,7 +850,7 @@ def dashboard():
                 "primary_contact": _primary_contact(company.id),
                 "score_breakdown": _score_breakdown(score),
             })
-            if len(call_list) >= 8:
+            if len(call_list) >= 12:
                 break
 
         cooling = []
@@ -786,7 +929,7 @@ def dashboard():
 
 
 def _competitive_pulse(session) -> dict:
-    cutoff_7d = datetime.now(timezone.utc) - timedelta(days=7)
+    cutoff_7d = _utcnow() - timedelta(days=7)
     events_7d = session.query(CompetitorEvent).filter(CompetitorEvent.detected_at >= cutoff_7d).count()
     competitor_signals = (
         session.query(Signal)
@@ -816,21 +959,56 @@ def _competitive_pulse(session) -> dict:
     }
 
 
-@app.get("/api/dashboard/digest")
-def dashboard_digest():
-    session = get_session()
-    try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=1)
-        cached = (
-            session.query(ProspectBrief)
-            .filter(ProspectBrief.brief_type == "daily_digest", ProspectBrief.generated_at >= cutoff)
-            .order_by(ProspectBrief.generated_at.desc())
-            .first()
-        )
-        if cached:
-            return {"digest": cached.brief_text}
+DIGEST_SYSTEM_MSG = (
+    "You are Iren's CRO writing the brief your VP of Sales reads before the team standup.\n\n"
+    + _build_iren_context()
+    + "\n\n"
+    "YOUR JOB: You care about EVERY deal — a $2M AI Cloud contract from a growth startup "
+    "matters because they will grow. You are building a book of business, not cherry-picking logos.\n\n"
+    "RULES:\n"
+    "1. Cover the full funnel. One sentence on early/growth-stage activity, one on enterprise, "
+    "one action item. If a competitive threat displaces one, cut the weakest.\n"
+    "2. Name names. Never say 'several companies.'\n"
+    "3. Connect signals to Iren products. Hiring at an AI lab = future GPU demand (AI Cloud). "
+    "Cloud spend at an enterprise = colo opportunity.\n"
+    "4. Give the VP something to DO. Not 'monitor closely' — 'get [name] on the phone "
+    "because [reason].'\n"
+    "5. Prose only. No headers, no bullets, no bold. 3-4 sentences."
+)
 
-        cutoff_7d = datetime.now(timezone.utc) - timedelta(days=7)
+MORNING_FRAME = (
+    "Here's the overnight data. Write my morning brief — what happened, "
+    "who moved, and what the team should do first today."
+)
+AFTERNOON_FRAME = (
+    "Here's what moved since this morning. Write my afternoon update — "
+    "what changed, whose priority shifted, and how to close the day strong."
+)
+
+
+def _detect_digest_period() -> str:
+    """Return 'morning' or 'afternoon' based on current UTC hour."""
+    return "morning" if datetime.now(timezone.utc).hour < 14 else "afternoon"
+
+
+def _build_digest_context(session, period: str) -> str:
+    """Build the structured data block for the digest prompt."""
+    now = _utcnow()
+    signal_hours = 18 if period == "morning" else 8
+    signal_cutoff = now - timedelta(hours=signal_hours)
+    cutoff_7d = now - timedelta(days=7)
+
+    prospects = session.query(Company).filter(Company.company_type == "prospect").all()
+    all_companies = {c.id: c for c in session.query(Company).all()}
+
+    signals = (
+        session.query(Signal)
+        .filter(Signal.detected_at >= signal_cutoff, Signal.is_active == True)
+        .order_by(Signal.detected_at.desc())
+        .limit(50)
+        .all()
+    )
+    if len(signals) < 5:
         signals = (
             session.query(Signal)
             .filter(Signal.detected_at >= cutoff_7d, Signal.is_active == True)
@@ -838,43 +1016,125 @@ def dashboard_digest():
             .limit(50)
             .all()
         )
-        score_map = get_latest_scores(session)
-        deltas = get_score_deltas(session)
-        all_companies = {c.id: c for c in session.query(Company).all()}
 
-        context_lines = ["SIGNALS THIS WEEK:"]
-        for s in signals[:30]:
-            comp = all_companies.get(s.company_id)
-            name = comp.name if comp else "Unknown"
-            context_lines.append(f"  [{s.signal_type}] {name}: {s.title[:120]}")
+    score_map = get_latest_scores(session)
+    deltas = get_score_deltas(session)
 
-        context_lines.append("\nTOP MOVERS:")
-        ranked = sorted(deltas.items(), key=lambda x: abs(x[1]), reverse=True)[:10]
-        for cid, d in ranked:
+    movers = sum(1 for d in deltas.values() if abs(d) > 0.1)
+    period_label = "overnight" if period == "morning" else "today"
+
+    lines = [
+        f"PIPELINE SNAPSHOT ({now.strftime('%Y-%m-%d')} {period}):",
+        f"  {len(prospects)} prospects tracked | {movers} with score movement | {len(signals)} active signals",
+        "",
+        f"SIGNALS ({period_label}):",
+    ]
+
+    def _sort_key(sig):
+        comp = all_companies.get(sig.company_id)
+        if not comp:
+            return 0
+        return comp.total_funding or 0
+
+    for s in sorted(signals[:30], key=_sort_key):
+        comp = all_companies.get(s.company_id)
+        if not comp:
+            continue
+        stage = _funding_stage(comp.total_funding, comp.is_public)
+        pfit = PRODUCT_FIT_LABELS.get(comp.product_fit or "", "")
+        size = f"~{comp.employee_count} ppl, " if comp.employee_count else ""
+        funding = f"${comp.total_funding / 1e6:.0f}M raised" if comp.total_funding else ""
+        meta_parts = [p for p in [stage, size, pfit, funding] if p]
+        meta = f" ({', '.join(meta_parts)})" if meta_parts else ""
+        lines.append(f"  [{s.signal_type}] {comp.name}{meta}: {s.title[:120]}")
+
+    up_movers = sorted(
+        [(cid, d) for cid, d in deltas.items() if d > 0.1],
+        key=lambda x: -x[1],
+    )[:5]
+    down_movers = sorted(
+        [(cid, d) for cid, d in deltas.items() if d < -0.1],
+        key=lambda x: x[1],
+    )[:3]
+
+    lines.append("")
+    lines.append("SCORE MOVERS:")
+    if up_movers:
+        parts = []
+        for cid, d in up_movers:
             comp = all_companies.get(cid)
             score = score_map.get(cid)
             if comp and score:
-                context_lines.append(f"  {comp.name}: {score.total_score:.1f} ({d:+.1f})")
+                parts.append(f"{comp.name} {score.total_score:.1f} ({d:+.1f})")
+        if parts:
+            lines.append(f"  UP:   {' | '.join(parts)}")
+    if down_movers:
+        parts = []
+        for cid, d in down_movers:
+            comp = all_companies.get(cid)
+            score = score_map.get(cid)
+            if comp and score:
+                parts.append(f"{comp.name} {score.total_score:.1f} ({d:+.1f})")
+        if parts:
+            lines.append(f"  DOWN: {' | '.join(parts)}")
+    if not up_movers and not down_movers:
+        lines.append("  No significant movement this period.")
+
+    comp_events = (
+        session.query(CompetitorEvent)
+        .filter(CompetitorEvent.detected_at >= (now - timedelta(days=7)))
+        .order_by(CompetitorEvent.detected_at.desc())
+        .limit(5)
+        .all()
+    )
+    if comp_events:
+        lines.append("")
+        lines.append("COMPETITIVE PULSE (7d):")
+        for e in comp_events:
+            comp = all_companies.get(e.company_id)
+            name = comp.name if comp else "Unknown"
+            lines.append(f"  {name}: {e.title[:150]}")
+
+    return "\n".join(lines)
+
+
+@app.get("/api/dashboard/digest")
+def dashboard_digest(period: str | None = Query(None)):
+    session = get_session()
+    try:
+        if period not in ("morning", "afternoon"):
+            period = _detect_digest_period()
+
+        brief_type = f"{period}_digest"
+        cutoff = _utcnow() - timedelta(hours=12)
+        cached = (
+            session.query(ProspectBrief)
+            .filter(ProspectBrief.brief_type == brief_type, ProspectBrief.generated_at >= cutoff)
+            .order_by(ProspectBrief.generated_at.desc())
+            .first()
+        )
+        if cached:
+            return {"digest": cached.brief_text, "period": period}
+
+        context_block = _build_digest_context(session, period)
+        frame = MORNING_FRAME if period == "morning" else AFTERNOON_FRAME
 
         client = get_ai_client()
         if not client:
-            return {"digest": None}
+            return {"digest": None, "period": period}
 
-        prompt = (
-            "You are a senior sales intelligence analyst at Iren, an AI infrastructure company. "
-            "Synthesize the signals and score changes below into a 2-3 sentence morning brief for the commercial team. "
-            "Focus on patterns, urgency, and who to prioritize. Be specific about company names. "
-            "Write for infrastructure finance dealmakers. No headers, no bullets — just prose.\n\n"
-            + "\n".join(context_lines)
-        )
-        result = call_with_fallback(client, [{"role": "user", "content": prompt}], max_tokens=200, temperature=0.3)
+        messages = [
+            {"role": "system", "content": DIGEST_SYSTEM_MSG},
+            {"role": "user", "content": f"{frame}\n\n{context_block}"},
+        ]
+        result = call_premium(client, messages, max_tokens=400, temperature=0.3)
 
         if result:
-            brief = ProspectBrief(company_id=None, brief_text=result, brief_type="daily_digest")
+            brief = ProspectBrief(company_id=None, brief_text=result, brief_type=brief_type)
             session.add(brief)
             session.commit()
 
-        return {"digest": result}
+        return {"digest": result, "period": period}
     finally:
         session.close()
 

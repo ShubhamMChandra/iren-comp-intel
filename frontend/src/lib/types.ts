@@ -192,6 +192,26 @@ export interface CompetitiveContext {
   iren_edge: string
 }
 
+export interface DealThreat {
+  prospect_id: number
+  prospect_name: string
+  product_fit: string
+  score: number
+  tier: Tier
+  competing_segments: string[]
+  recent_competitor_moves: {
+    company_name: string
+    event_type: string
+    title: string
+    detected_at: string | null
+  }[]
+}
+
+export interface DealThreatsData {
+  threats: DealThreat[]
+  total_at_risk: number
+}
+
 export interface CompetitivePulse {
   events_7d: number
   signals_7d: number

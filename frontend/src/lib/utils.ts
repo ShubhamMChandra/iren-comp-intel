@@ -85,6 +85,13 @@ export const URGENCY_COLORS: Record<string, string> = {
   LOW: "text-zinc-400",
 }
 
+export const URGENCY_BADGE_COLORS: Record<string, string> = {
+  URGENT: "text-red-400 bg-red-400/10 border-red-400/30",
+  HIGH: "text-orange-400 bg-orange-400/10 border-orange-400/30",
+  MEDIUM: "text-amber-400 bg-amber-400/10 border-amber-400/30",
+  LOW: "text-zinc-500 bg-zinc-500/10 border-zinc-500/20",
+}
+
 export const SOURCE_CONFIDENCE: Record<string, { label: string; level: "high" | "medium" | "low" }> = {
   sec_filing: { label: "SEC Filing", level: "high" },
   major_news: { label: "Verified", level: "high" },

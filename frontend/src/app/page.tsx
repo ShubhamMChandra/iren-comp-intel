@@ -55,6 +55,7 @@ function DashboardSkeleton() {
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [digest, setDigest] = useState<string | null>(null)
+  const [digestPeriod, setDigestPeriod] = useState<string>("morning")
   const [digestLoading, setDigestLoading] = useState(true)
   const [fundingSignals, setFundingSignals] = useState<Signal[]>([])
   const [loading, setLoading] = useState(true)
@@ -62,27 +63,39 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let cancelled = false
+    const period = new Date().getHours() < 14 ? "morning" : "afternoon"
+    setDigestPeriod(period)
 
     getDashboard()
       .then((d) => { if (!cancelled) setData(d) })
       .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load") })
       .finally(() => { if (!cancelled) setLoading(false) })
 
-    getDashboardDigest()
-      .then((r) => { if (!cancelled) setDigest(r.digest) })
+    getDashboardDigest(period as "morning" | "afternoon")
+      .then((r) => { if (!cancelled) { setDigest(r.digest); setDigestPeriod(r.period) } })
       .catch(() => {})
       .finally(() => { if (!cancelled) setDigestLoading(false) })
 
     Promise.all([
-      getSignals({ signal_type: "fundraising", days: 30, limit: 10 }),
-      getSignals({ signal_type: "funding_completed", days: 30, limit: 10 }),
+      getSignals({ signal_type: "fundraising", days: 60, limit: 40, dedup: true }),
+      getSignals({ signal_type: "funding_completed", days: 60, limit: 40, dedup: true }),
     ])
       .then(([raising, completed]) => {
         if (cancelled) return
-        const merged = [...raising, ...completed]
+        const sorted = [...raising, ...completed]
           .sort((a, b) => (b.detected_at ?? "").localeCompare(a.detected_at ?? ""))
-          .slice(0, 8)
-        setFundingSignals(merged)
+        // Embedding dedup handles near-identical headlines; cap handles
+        // different-angle articles about the same event from one company.
+        const seen = new Map<string, number>()
+        const diverse: typeof sorted = []
+        for (const s of sorted) {
+          const key = s.company_name || String(s.company_id)
+          if ((seen.get(key) ?? 0) >= 1) continue
+          seen.set(key, (seen.get(key) ?? 0) + 1)
+          diverse.push(s)
+          if (diverse.length >= 12) break
+        }
+        setFundingSignals(diverse)
       })
       .catch(() => {})
 
@@ -212,12 +225,12 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* AI Morning Digest */}
+      {/* AI Digest */}
       <Card className="mb-8 border-[#22c55e]/20 bg-[#22c55e]/[0.03]">
         <CardHeader className="pb-2">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-[#22c55e]" />
-            <CardTitle className="text-sm font-medium">Morning Digest</CardTitle>
+            <CardTitle className="text-sm font-medium">{digestPeriod === "afternoon" ? "Afternoon" : "Morning"} Digest</CardTitle>
             <Badge variant="outline" className="text-[10px] border-[#22c55e]/30 text-[#22c55e]">AI</Badge>
           </div>
         </CardHeader>
@@ -254,11 +267,11 @@ export default function DashboardPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border/50 text-left text-muted-foreground">
-                      <th className="pb-2 pr-4 text-xs font-medium">Company</th>
-                      <th className="pb-2 pr-4 text-xs font-medium">Score</th>
-                      <th className="pb-2 pr-4 text-xs font-medium">Change</th>
-                      <th className="pb-2 pr-4 text-xs font-medium hidden md:table-cell">Why Now</th>
+                    <tr className="border-b border-border/50 text-muted-foreground">
+                      <th className="pb-2 pl-3 pr-4 text-left text-xs font-medium">Company</th>
+                      <th className="pb-2 pr-4 text-left text-xs font-medium">Score</th>
+                      <th className="pb-2 pr-4 text-right text-xs font-medium">Change</th>
+                      <th className="pb-2 pr-4 text-left text-xs font-medium hidden md:table-cell">Why Now</th>
                       <th className="pb-2 text-xs font-medium"></th>
                     </tr>
                   </thead>
@@ -275,7 +288,7 @@ export default function DashboardPage() {
                             p.urgency === "MEDIUM" && "border-l-2 border-l-amber-400/50",
                           )}
                         >
-                          <td className="py-2.5 pr-4">
+                          <td className="py-2.5 pl-3 pr-4">
                             <div className="flex items-center gap-2">
                               <span className="font-medium">{p.name}</span>
                               <ProductBadge productFit={p.product_fit} />
@@ -306,7 +319,7 @@ export default function DashboardPage() {
                               </DrillDown>
                             </div>
                           </td>
-                          <td className="py-2.5 pr-4">
+                          <td className="py-2.5 pr-4 text-right">
                             <DrillDown
                               title="Score Change"
                               content={<DeltaExplainer score={p.score} delta={p.delta} />}

@@ -2,10 +2,11 @@
 Shared AI client configured for OpenRouter.
 OpenRouter is OpenAI-compatible — same client, different base_url.
 
-Two-tier model strategy:
-  Bulk tier  — Gemini 2.5 Flash (collection/enrichment pipelines)
-  Analysis   — Kimi K2 (user-facing briefs, emails, battle cards)
-  Fallback   — Gemini Flash (if analysis model fails)
+Three-tier model strategy:
+  Bulk tier    — Gemini 2.5 Flash (collection/enrichment pipelines)
+  Analysis     — Kimi K2 (user-facing briefs, emails, battle cards)
+  Premium      — Opus 4.6 with adaptive thinking (daily digest)
+  Fallback     — Gemini Flash (if analysis model fails)
 """
 
 from openai import OpenAI
@@ -13,6 +14,7 @@ from openai import OpenAI
 from config import (
     AI_MODEL_ANALYSIS,
     AI_MODEL_BULK,
+    AI_MODEL_PREMIUM,
     OPENAI_API_KEY,
     OPENAI_MODEL,
     OPENROUTER_API_KEY,
@@ -51,6 +53,10 @@ def get_bulk_model() -> str:
 
 def get_analysis_model() -> str:
     return AI_MODEL_ANALYSIS
+
+
+def get_premium_model() -> str:
+    return AI_MODEL_PREMIUM
 
 
 def call_bulk(
@@ -100,3 +106,25 @@ def call_with_fallback(
                 print(f"[ai] {fallback} also failed: {e}")
 
     return None
+
+
+def call_premium(
+    client: OpenAI,
+    messages: list[dict],
+    max_tokens: int = 1000,
+    temperature: float = 0.3,
+) -> str | None:
+    """Use premium model (Opus 4.6 with adaptive thinking). Falls back to analysis tier."""
+    model = get_premium_model()
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            extra_body={"thinking": {"type": "adaptive"}},
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"[ai] premium model {model} failed ({e}), falling back to analysis tier")
+        return call_with_fallback(client, messages, max_tokens, temperature)

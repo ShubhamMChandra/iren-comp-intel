@@ -11,6 +11,10 @@ from collectors.ats_collector import ATSCollector
 from collectors.cloud_blog_collector import CloudBlogCollector
 from collectors.competitive_intel_collector import CompetitiveIntelCollector
 from collectors.earnings_collector import EarningsCollector
+from collectors.edgar_rss_collector import EdgarRSSCollector
+from collectors.peeringdb_collector import PeeringDBCollector
+from collectors.press_release_collector import PressReleaseCollector
+from collectors.trends_collector import TrendsCollector
 from collectors.funding_collector import FundingCollector
 from collectors.github_collector import GitHubCollector
 from collectors.hn_collector import HNCollector
@@ -30,6 +34,10 @@ COLLECTORS = {
     "hn": HNCollector,
     "cloud_blogs": CloudBlogCollector,
     "competitive_intel": CompetitiveIntelCollector,
+    "press_releases": PressReleaseCollector,
+    "edgar_rss": EdgarRSSCollector,
+    "peeringdb": PeeringDBCollector,
+    "trends": TrendsCollector,
 }
 
 

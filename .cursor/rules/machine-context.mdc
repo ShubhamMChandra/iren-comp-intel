@@ -1,0 +1,34 @@
+---
+description: Machine-readable project context for efficient LLM-assisted development
+alwaysApply: false
+---
+
+# Machine-Readable Context
+
+For a **single source of truth** that agents and tools can parse:
+
+- **Read** `internal/llm-context.yaml`
+
+It contains:
+
+- **project** — name, stack, database path
+- **layout** — backend/frontend file map (what each module does)
+- **backend_api** — all FastAPI routes (path, method, handler)
+- **frontend_api** — all frontend API functions (name, path, method)
+- **types** — backend models and frontend types with locations
+- **conventions** — signal_types, source_types, company_type, scoring, Ollama rules
+- **task_checklists** — structured steps for add_signal_type, add_collector, add_company, rescore, backfill, update_readme
+
+Use it to:
+
+- Resolve where to add code (layout, types)
+- Match backend routes to frontend calls (backend_api ↔ frontend_api)
+- Follow multi-file tasks without re-reading prose (task_checklists)
+
+**Regenerate after changing API surface:**
+
+```bash
+python scripts/generate_llm_context.py
+```
+
+Runs in place; updates only the `backend_api.routes` and `frontend_api.functions` sections.

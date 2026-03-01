@@ -1,6 +1,6 @@
 # Iren Sales Intelligence Platform
 
-Signal-driven GTM intelligence for Iren's commercial team — 290 prospects across 15 segments, 15 competitors across 5 market segments, 11 data collectors, AI-generated briefs, and a scoring engine that surfaces timing.
+Signal-driven GTM intelligence for Iren's commercial team — 290 prospects across 15 segments, 20+ competitors across 6 market segments, 15 data collectors, AI-generated briefs, and a scoring engine that surfaces timing.
 
 ## The Problem
 
@@ -18,13 +18,13 @@ Signal intelligence mapped to the buyer journey. Every prospect signal maps to o
 
 **Actively Evaluating** — Company is outgrowing current provider. Capacity complaints, migration signals, vendor switching discussions. This is the highest-urgency window — they're in-market now.
 
-11 data collectors pull from free public sources. A weighted scoring engine with exponential recency decay ranks prospects across 6 signal categories (max 100 points). AI-generated briefs surface what happened, why it matters, what to do, and by when. Three-tier LLM cost model runs the entire collection pipeline for ~$0.15/run.
+15 data collectors pull from free public sources. A weighted scoring engine with exponential recency decay ranks prospects across 6 signal categories (max 100 points). AI-generated briefs surface what happened, why it matters, what to do, and by when. Four-tier LLM cost model runs the entire collection pipeline for ~$0.15/run, with a premium Opus 4.6 tier for the daily digest.
 
-A competitive intelligence layer tracks 15 competitors across 5 market segments (Neocloud, Hyperscaler, DC REIT, Power-First, International), each profiled with key customers, pricing intel, strengths/weaknesses, and an Iren-relative threat level. Prospect-level competitive context maps which competitors a rep is likely bidding against for any given deal, based on the prospect's product fit.
+A competitive intelligence layer tracks 20+ competitors across 6 market segments (Neocloud, Hyperscaler, DC REIT, Power-First, International, Miner-to-HPC), each profiled with key customers, pricing intel, strengths/weaknesses, and an Iren-relative threat level. Prospect-level competitive context maps which competitors a rep is likely bidding against for any given deal, based on the prospect's product fit.
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │  DATA SOURCES (all free)                                        │
 │  RSS Feeds · Google News · SEC EDGAR · ATS (Greenhouse/Lever)   │
@@ -33,7 +33,7 @@ A competitive intelligence layer tracks 15 competitors across 5 market segments 
 └──────────────────────────┬──────────────────────────────────────┘
                            │
                     ┌──────▼──────┐
-                    │ 11 Collectors   │
+                    │ 15 Collectors   │
                     │ (Python)        │
                     └──────┬──────┘
                            │
@@ -73,8 +73,9 @@ A competitive intelligence layer tracks 15 competitors across 5 market segments 
 | Free | Ollama `nomic-embed-text` (local) | $0 | Embeddings, dedup, semantic search |
 | Bulk | Gemini 2.5 Flash | $0.30/$2.50 per M tokens | Signal classification, article summaries |
 | Analysis | Kimi K2 | $0.55/$2.20 per M tokens | Briefs, outreach emails, battle cards |
+| Premium | Opus 4.6 | $5.00/$25.00 per M tokens | Daily digest (2x/day, cached) |
 
-Every AI call has a keyword-based fallback. The platform scores and surfaces prospects with zero API keys configured.
+Every AI call has a keyword-based fallback. Premium falls back to Analysis, Analysis falls back to Bulk, Bulk falls back to keyword extraction. The platform scores and surfaces prospects with zero API keys configured.
 
 ## Signal Framework
 
@@ -104,6 +105,10 @@ Each signal carries an urgency level (URGENT / HIGH / MEDIUM) and an action temp
 | `hn` | Hacker News API | hiring, fundraising, outgrowing | Free |
 | `cloud_blogs` | AWS/GCP/Azure blog RSS | ai_initiative, cloud_spend | Free |
 | `competitive_intel` | DuckDuckGo web search | CompetitorEvents (deal, expansion, pricing, talent) | Free |
+| `press_releases` | Company press release pages | All | Free |
+| `edgar_rss` | SEC EDGAR RSS (real-time filings) | fundraising, funding_completed | Free |
+| `peeringdb` | PeeringDB API (network facility data) | cloud_spend | Free |
+| `trends` | Google Trends (search interest) | ai_initiative | Free |
 
 All collectors inherit from `BaseCollector` which handles session management, semantic dedup via Ollama embeddings, and per-item error isolation (one failed article doesn't skip the rest). The `competitive_intel` collector searches for each competitor's recent deals, expansions, pricing changes, and talent moves, creating `CompetitorEvent` rows (separate from prospect signals).
 
@@ -131,7 +136,7 @@ All collectors inherit from `BaseCollector` which handles session management, se
 
 ## Competitive Intelligence
 
-15 competitors tracked across 5 market segments. Each competitor is profiled with key customers, pricing intel, strengths, weaknesses, and an Iren-relative threat level (high/medium/low). This is the data a Bain GTM strategy team would compile — structured for reps, not analysts.
+20+ competitors tracked across 6 market segments. Each competitor is profiled with key customers, pricing intel, strengths, weaknesses, and an Iren-relative threat level (high/medium/low). This is the data a Bain GTM strategy team would compile — structured for reps, not analysts.
 
 | Segment | Competitors | Key Battleground | Iren Positioning |
 |---------|------------|------------------|------------------|
@@ -140,14 +145,15 @@ All collectors inherit from `BaseCollector` which handles session management, se
 | DC REIT | Equinix, Digital Realty, QTS, CyrusOne, Vantage | Power density (kW/rack), campus scale, PUE | Iren differentiates on AI-ready design + renewable energy cost advantage |
 | Power-First | Lancium, Applied Digital | Power cost ($/kWh), MW pipeline, construction speed | Direct competitors — same energy-first playbook |
 | International | Adani Group | Geography, regulatory approval, talent access | Iren competes on US proximity and operational track record |
+| Miner-to-HPC | Hut 8, Core Scientific, Cipher Mining, HIVE Digital, TeraWulf, Bit Digital | Pivot execution speed, HPC customer contracts, power cost | Direct peers with the same Bitcoin-to-AI playbook — Iren differentiates on execution speed, customer quality, and renewable energy |
 
-**Threat assessment:** 7 high-threat (CoreWeave, Crusoe, Nebius, QTS, Vantage, Lancium, Applied Digital), 4 medium (Lambda, Voltage Park, Digital Realty, CyrusOne), 4 low (AWS, Google Cloud, Equinix, Adani).
+**Threat assessment:** Includes high-threat competitors across Neocloud (CoreWeave, Crusoe, Nebius), DC REIT (QTS, Vantage), Power-First (Lancium, Applied Digital), and Miner-to-HPC (Hut 8, Core Scientific) segments.
 
 **Prospect-level competitive context:** Every prospect's product fit (AI Cloud, Colocation, Build-to-Suit) maps to relevant competitor segments. When a rep opens a prospect, they see which competitors they're likely bidding against, recent competitive moves from those competitors, and Iren's positioning edge. The mapping:
 
-- `ai_cloud` → Neocloud + Hyperscaler competitors
+- `ai_cloud` → Neocloud + Hyperscaler + Miner-to-HPC competitors
 - `colocation` → DC REIT + Power-First competitors
-- `build_to_suit` → Power-First + DC REIT competitors
+- `build_to_suit` → Power-First + DC REIT + Miner-to-HPC competitors
 
 **Data enrichment:** The `competitive_intel` collector runs web searches per competitor to discover recent deals, facility expansions, pricing changes, and executive hires. Results are classified and stored as `CompetitorEvent` rows, feeding the activity feed and competitive pulse.
 
@@ -155,7 +161,7 @@ All collectors inherit from `BaseCollector` which handles session management, se
 
 Each prospect is scored 0–100 across 6 categories. Formula per signal:
 
-```
+```text
 points = base_points × recency_decay × magnitude_multiplier × source_confidence
 ```
 
@@ -220,9 +226,19 @@ cd ..
 cd frontend && npm install && npm run dev
 ```
 
-- Frontend: http://localhost:3000
-- API docs: http://localhost:8000/docs
+- Frontend: <http://localhost:3000>
+- API docs: <http://localhost:8000/docs>
 - Ollama (optional): `ollama pull nomic-embed-text` then `python -m ai.embed_backfill` for semantic dedup
+
+## Deployment (Railway)
+
+The app runs on Railway with two services in one project.
+
+**API** (existing): Root = repo root. Env: `DATABASE_URL=sqlite:////data/iren_intel.db`, `CORS_ORIGINS=*`. Add a **Volume** (mount `/data`) in the dashboard so SQLite persists. Deploy: `railway link` → `railway service api` → `railway up` from repo root.
+
+**Frontend**: In Railway dashboard, add a second service (Empty Service), name it `frontend`. Set **Root Directory** to `frontend`. Set env `NEXT_PUBLIC_API_URL` to your API URL (e.g. `https://api-production-xxx.up.railway.app`). Generate a domain for the frontend service. Deploy: `railway service frontend` → `railway up` from repo root (or trigger deploy from the UI).
+
+See `api/README.md` for API-only deploy steps and volume setup.
 
 ## Tech Stack
 
@@ -230,7 +246,7 @@ Python 3.14, FastAPI, SQLAlchemy 2.x, SQLite, OpenRouter (Kimi K2 + Gemini 2.5 F
 
 ## Cost Model
 
-Three tiers: **Free** (Ollama local, $0 for all embeddings), **Bulk** (Gemini 2.5 Flash at ~$0.15/collection run for classification and summaries), **Analysis** (Kimi K2 at ~$0.05/request for briefs and emails). Full collection run + 10 AI briefs = ~$0.65. $15 total budget covers 30+ full runs and 100+ user-facing briefs.
+Four tiers: **Free** (Ollama local, $0 for all embeddings), **Bulk** (Gemini 2.5 Flash at ~$0.15/collection run for classification and summaries), **Analysis** (Kimi K2 at ~$0.05/request for briefs and emails), **Premium** (Opus 4.6 at ~$0.10/digest for the daily digest, 2x/day with caching). Full collection run + 10 AI briefs = ~$0.65. $15 total budget covers 30+ collection runs, 50+ analysis requests, and 60 daily digests.
 
 ## Tests
 

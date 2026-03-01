@@ -12,6 +12,9 @@ load_dotenv(BASE_DIR / ".env")
 
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'data' / 'iren_intel.db'}")
 
+# CORS — wildcard in dev; set CORS_ORIGINS=https://app.example.com in production
+CORS_ORIGINS: list[str] = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()] or ["*"]
+
 # OpenRouter (OpenAI-compatible API) — used for all AI features
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 AI_MODEL = os.getenv("AI_MODEL", "google/gemini-2.0-flash-001")
@@ -25,9 +28,10 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "") or AI_MODEL
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 
-# Two-tier LLM models (via OpenRouter)
+# Three-tier LLM models (via OpenRouter)
 AI_MODEL_BULK = os.getenv("AI_MODEL_BULK", "google/gemini-2.5-flash")
 AI_MODEL_ANALYSIS = os.getenv("AI_MODEL_ANALYSIS", "") or AI_MODEL
+AI_MODEL_PREMIUM = os.getenv("AI_MODEL_PREMIUM", "anthropic/claude-4.6-opus-20260205")
 
 SEC_EDGAR_USER_AGENT = os.getenv(
     "SEC_EDGAR_USER_AGENT",
@@ -98,10 +102,19 @@ IREN_BENCHMARK = {
     "gpu_count": None,
     "is_public": True,
     "ticker": "IREN",
+    "exchange": "ASX",
     "hq_location": "Sydney, Australia",
     "website": "https://iren.com",
     "key_customers": ["Microsoft"],
     "known_pricing": "Build-to-suit and colocation; pricing not publicly listed. Competitive on TCO via renewable energy.",
+    "products": {
+        "ai_cloud": "GPU-as-a-service for AI training and inference",
+        "colocation": "High-density colocation with air and liquid cooling",
+        "build_to_suit": "Dedicated campus builds for hyperscaler-scale customers",
+    },
+    "gpu_models": ["H100", "H200", "B200", "B300", "GB300 NVL72"],
+    "locations": ["Texas", "Oklahoma", "British Columbia"],
+    "cooling": ["air", "liquid"],
     "strengths": [
         "Vertically integrated: own power generation (renewable)",
         "Low-cost energy advantage in BC, Canada and Texas",
@@ -126,6 +139,8 @@ COMPETITOR_SEGMENTS: dict[str, str] = {
     "Energy": "Power-First",
     "Power": "Power-First",
     "Conglomerate": "International",
+    "Mining": "Miner-to-HPC",
+    "HPC": "Miner-to-HPC",
 }
 COMPETITOR_SEGMENT_DEFAULT = "Data Center"
 
@@ -155,10 +170,15 @@ SEGMENT_PROFILES: dict[str, dict[str, str]] = {
         "iren_positioning": "Iren competes on proximity to US demand centers and proven operational track record",
         "key_battleground": "Geography, regulatory approval, subsea connectivity, talent access",
     },
+    "Miner-to-HPC": {
+        "description": "Bitcoin miners pivoting to AI/HPC data centers — same origin story as Iren",
+        "iren_positioning": "Direct peers with the same playbook. Iren differentiates on execution speed, renewable energy cost, and customer quality.",
+        "key_battleground": "Pivot execution speed, HPC customer contracts, power cost, GPU deployment timeline",
+    },
 }
 
 PRODUCT_FIT_TO_SEGMENTS: dict[str, list[str]] = {
-    "ai_cloud": ["Neocloud", "Hyperscaler"],
+    "ai_cloud": ["Neocloud", "Hyperscaler", "Miner-to-HPC"],
     "colocation": ["DC REIT", "Power-First"],
-    "build_to_suit": ["Power-First", "DC REIT"],
+    "build_to_suit": ["Power-First", "DC REIT", "Miner-to-HPC"],
 }

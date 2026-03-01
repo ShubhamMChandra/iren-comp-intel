@@ -3087,6 +3087,144 @@ COMPETITORS = [
         "weaknesses": '["India-focused — not competing directly in U.S. market", "Governance/fraud allegations (Hindenburg) create reputational risk", "History of ambitious announcements with delayed delivery"]',
         "threat_level": "low",
     },
+    # --- Miner-to-HPC (same pivot as Iren) ---
+    {
+        "name": "Hut 8",
+        "industry": "Mining → HPC / Data Center",
+        "website": "https://hut8.com",
+        "description": "Former BTC miner pivoting to AI data center infrastructure. $7B FluidStack deal with Google backstop. 8.5 GW development pipeline.",
+        "hq_location": "Miami, FL",
+        "is_public": True,
+        "ticker": "HUT",
+        "capacity_mw": 1020,
+        "key_customers": '["FluidStack ($7B, 15yr, Google backstop)"]',
+        "known_pricing": "Build-to-suit colocation. 245 MW initial delivery at River Bend campus, Q2 2027.",
+        "strengths": '["8.5 GW development pipeline across 19 locations", "Proprietary liquid cooling (Vega) enabling 180 kW/rack", "$7B FluidStack deal provides multi-year revenue visibility", "Google financial backstop de-risks counterparty"]',
+        "weaknesses": '["Revenue still mostly Bitcoin mining during transition", "First HPC delivery not until Q2 2027 — execution risk", "Heavy capital requirements for 8.5 GW buildout", "Unproven at scale in HPC operations"]',
+        "threat_level": "high",
+    },
+    {
+        "name": "Core Scientific",
+        "industry": "Mining → HPC / Data Center",
+        "website": "https://corescientific.com",
+        "description": "Emerged from bankruptcy, signed $8.7B in CoreWeave hosting contracts. Being acquired by CoreWeave.",
+        "hq_location": "Austin, TX",
+        "is_public": True,
+        "ticker": "CORZ",
+        "capacity_mw": 500,
+        "key_customers": '["CoreWeave (500 MW, $8.7B, 12yr)"]',
+        "known_pricing": "CoreWeave funds all capex for infrastructure modifications. Long-term hosting model.",
+        "strengths": '["500 MW contracted to CoreWeave across 6 sites", "$8.7B cumulative revenue over 12-year terms", "CoreWeave acquisition provides capital + customer certainty", "Existing operational infrastructure — no greenfield risk"]',
+        "weaknesses": '["Being acquired — will lose independence", "100% customer concentration (CoreWeave)", "Emerged from bankruptcy in early 2024 — limited track record post-restructure", "CoreWeave itself has $30B debt"]',
+        "threat_level": "high",
+    },
+    {
+        "name": "Cipher Mining",
+        "industry": "Mining → HPC / Data Center",
+        "website": "https://ciphermining.com",
+        "description": "Pivoting from BTC mining to HPC with $9.3B in contracted leases. Exiting mining by end 2026.",
+        "hq_location": "New York, NY",
+        "is_public": True,
+        "ticker": "CIFR",
+        "capacity_mw": 807,
+        "key_customers": '["AWS ($5.5B, 15yr, 300 MW)", "FluidStack ($3.8B, Google backstop, 300 MW)"]',
+        "known_pricing": "Long-term colocation: 10-15yr leases. $669M projected avg annual NOI from Oct 2026.",
+        "strengths": '["$9.3B in contracted HPC revenue — largest among miner pivots", "AWS as anchor customer provides blue-chip credibility", "$3.4B project-level debt fully funds construction", "Exiting BTC mining entirely — full commitment to HPC"]',
+        "weaknesses": '["First HPC revenue not until Aug 2026 — 100% execution risk until then", "Two customers only (AWS + FluidStack)", "1 GW Colchis site still in early development", "No GPU cloud experience — pure colocation play"]',
+        "threat_level": "high",
+    },
+    {
+        "name": "TeraWulf",
+        "industry": "Mining → HPC / Data Center",
+        "website": "https://terawulf.com",
+        "description": "Google-backed via FluidStack. Nuclear/hydro-powered AI infrastructure at Lake Mariner NY campus.",
+        "hq_location": "Easton, MD",
+        "is_public": True,
+        "ticker": "WULF",
+        "capacity_mw": 500,
+        "key_customers": '["FluidStack ($3.7B+, Google credit)", "Core42 (60 MW colocation)"]',
+        "known_pricing": "Build-to-suit colocation. 168 MW buildings, standardized design. Revenue ramping H2 2025.",
+        "strengths": '["Nuclear/hydro power at Lake Mariner — genuine low-carbon story", "Google credit backing via FluidStack reduces counterparty risk", "500+ MW contracted, 250-500 MW annual deployment target", "Cayuga site: up to 400 MW at retired coal plant"]',
+        "weaknesses": '["Concentrated on FluidStack/Google for most revenue", "Lake Mariner in Western NY — not ideal latency for many workloads", "Smaller scale vs Cipher/Hut 8 pipeline", "Still ramping — limited operational HPC track record"]',
+        "threat_level": "high",
+    },
+    {
+        "name": "RIOT Platforms",
+        "industry": "Mining → HPC / Data Center",
+        "website": "https://riotplatforms.com",
+        "description": "Largest BTC miner evaluating 600 MW HPC conversion at 1 GW Corsicana TX facility.",
+        "hq_location": "Castle Rock, CO",
+        "is_public": True,
+        "ticker": "RIOT",
+        "capacity_mw": 1000,
+        "key_customers": '[]',
+        "known_pricing": "No HPC pricing yet. Evaluating conversion of 600 MW from mining to AI/HPC.",
+        "strengths": '["1 GW total approved capacity at Corsicana — massive potential", "Sub-5ms latency to Dallas — excellent for AI workloads", "Strong balance sheet from mining operations", "112 MW core-and-shell development initiated"]',
+        "weaknesses": '["No signed HPC leases yet — still in evaluation phase", "400 MW still committed to BTC mining", "Engaged consultants (Altman Solon) — signals early stage", "Late to pivot vs peers who already have $B contracts"]',
+        "threat_level": "medium",
+    },
+    {
+        "name": "CleanSpark",
+        "industry": "Mining → HPC / Data Center",
+        "website": "https://cleanspark.com",
+        "description": "Large BTC miner acquiring 890 MW of Texas power for AI/HPC campus development.",
+        "hq_location": "Henderson, NV",
+        "is_public": True,
+        "ticker": "CLSK",
+        "capacity_mw": 890,
+        "key_customers": '[]',
+        "known_pricing": "No HPC pricing yet. Engaging prospective co-location and compute partners.",
+        "strengths": '["890 MW secured across two Houston-area sites", "Strong balance sheet: $1.4B equity, $458M cash", "Near-gigawatt regional density attractive for multi-campus AI", "BTC mining cash flows fund AI infrastructure buildout"]',
+        "weaknesses": '["No HPC customers or contracts signed yet", "Sites still in acquisition phase (Brazoria County closing Q1 2026)", "Zero HPC operational experience", "Earliest HPC revenue likely 2027+"]',
+        "threat_level": "medium",
+    },
+    {
+        "name": "HIVE Digital Technologies",
+        "industry": "Mining → HPC / GPU Cloud",
+        "website": "https://hivedigitaltechnologies.com",
+        "description": "Running GPU cloud (BUZZ) alongside mining. Small scale: ~1,260 GPUs, $35M AI revenue target.",
+        "hq_location": "Vancouver, Canada",
+        "is_public": True,
+        "ticker": "HIVE",
+        "capacity_mw": 540,
+        "gpu_count": 1260,
+        "key_customers": '["Enterprise AI customers (undisclosed)", "Bell Canada (partnership)"]',
+        "known_pricing": "H100/H200 GPU cloud via BUZZ subsidiary. $30M in 2yr fixed AI cloud contracts signed.",
+        "strengths": '["Already operational GPU cloud (BUZZ) — ahead of most miner peers", "Renewable-powered across Canada, Sweden, Paraguay", "540 MW total infrastructure across 3 countries", "Bell Canada partnership for Canadian market"]',
+        "weaknesses": '["Tiny GPU fleet (~1,260) vs neoclouds (250K+)", "$35M AI revenue target is very small", "Still majority BTC mining revenue", "Scattered global footprint vs US-focused competitors"]',
+        "threat_level": "low",
+    },
+    {
+        "name": "Bit Digital",
+        "industry": "Mining → HPC / GPU Cloud",
+        "website": "https://bit-digital.com",
+        "description": "Small-scale GPU cloud with 1,792 GPUs. $10M ARR. Deploying GB200 NVL72 in Malaysia.",
+        "hq_location": "New York, NY",
+        "is_public": True,
+        "ticker": "BTBT",
+        "capacity_mw": None,
+        "gpu_count": 1792,
+        "key_customers": '["Undisclosed major HPC customer ($275M, 3yr, 4,096 GPUs)"]',
+        "known_pricing": "GPU hosting: ~$4.4M/month revenue from 2,144 GPUs. B200/GB200 deployments starting.",
+        "strengths": '["Already deploying latest NVIDIA GPUs (B200, GB200 NVL72)", "$275M anchor customer contract provides base", "Multi-geography: US, Iceland, Malaysia", "Evaluating US datacenter leasing for expansion"]',
+        "weaknesses": '["Very small scale: 1,792 GPUs, $10M ARR", "41% utilization rate — struggling to fill capacity", "No significant power/energy assets", "Fragmented across too many geographies for its size"]',
+        "threat_level": "low",
+    },
+    {
+        "name": "Soluna Computing",
+        "industry": "Mining → HPC / Renewable Energy",
+        "website": "https://solunacomputing.com",
+        "description": "Renewable energy + computing at Project Kati, TX. 350 MW AI campus with wind power.",
+        "hq_location": "Albany, NY",
+        "is_public": True,
+        "ticker": "SLNH",
+        "capacity_mw": 350,
+        "key_customers": '["Metrobloks (co-development partner for 100+ MW AI campus)"]',
+        "known_pricing": "Co-development model. Renewable wind-powered. EDF Renewables and Masdar as energy partners.",
+        "strengths": '["100% renewable (wind) — strongest clean energy story among miners", "350 MW AI campus plan at Project Kati, TX", "EDF Renewables + Masdar backing for energy", "Behind-the-meter renewable power reduces costs"]',
+        "weaknesses": '["Very small company — limited capital access", "Project Kati 2 AI campus still in early construction", "No HPC customers contracted yet", "K1A Phase 1 only 24 MW — long way to 350 MW"]',
+        "threat_level": "low",
+    },
 ]
 
 
@@ -3148,6 +3286,502 @@ CONTACTS = [
     ("Apple", "VP Infrastructure", "technical", "vp", "David Smoley", "Lead with cooling efficiency, power density, and custom build capabilities"),
     ("Apple", "Head of Procurement", "procurement", "director", "Karen Liu", "Lead with IREN's vertical integration and construction timeline advantages"),
 ]
+
+
+# ---------------------------------------------------------------------------
+# Demo signal data — 15 companies (5 large / 5 mid / 5 small) with realistic
+# recent signals and pre-set baseline scores so the Today page shows 10+ rows
+# with positive deltas from day one.
+# ---------------------------------------------------------------------------
+
+# baseline_score = score stored as the "previous" reading (14 days ago).
+# The scoring engine will compute a higher current score from the signals below,
+# giving each company a positive delta that lands them on the Call List.
+
+SEED_SIGNALS: list[dict] = [
+    # -------------------------------------------------------------------------
+    # LARGE (5)
+    # -------------------------------------------------------------------------
+    {
+        "company": "OpenAI",
+        "baseline_score": 32.0,
+        "signals": [
+            {
+                "type": "funding_completed",
+                "title": "OpenAI closes $40B Series F at $300B valuation led by SoftBank",
+                "summary": "OpenAI completed its largest funding round to date, raising $40B to accelerate compute infrastructure and data-center buildout.",
+                "source_type": "major_news",
+                "magnitude": 40_000_000_000,
+                "days_ago": 4,
+                "action_insight": "Funding confirms multi-GW GPU cluster expansion — pitch colocation + power capacity → Prioritize CTO/VP Infra outreach",
+            },
+            {
+                "type": "hiring",
+                "title": "OpenAI hiring 300+ infrastructure engineers for GPU cluster ops",
+                "summary": "OpenAI posted 300+ roles in compute infrastructure, data-center operations, and power procurement across US regions.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 6,
+                "action_insight": "Aggressive infra hiring signals imminent capacity expansion — lead with speed-to-rack and power density",
+            },
+            {
+                "type": "ai_initiative",
+                "title": "OpenAI launches o3 reasoning model with 100K token context and real-time inference",
+                "summary": "New o3 model drives 4× throughput demand on OpenAI's inference fleet, accelerating GPU procurement timelines.",
+                "source_type": "major_news",
+                "magnitude": 2.0,
+                "days_ago": 2,
+                "action_insight": "New flagship model will stress existing clusters — position IREN as rapid-deployment partner",
+            },
+        ],
+    },
+    {
+        "company": "Anthropic",
+        "baseline_score": 28.0,
+        "signals": [
+            {
+                "type": "funding_completed",
+                "title": "Anthropic raises $3.5B Series E co-led by Google and Spark Capital",
+                "summary": "Round brings Anthropic's total funding to $12B+, dedicated to compute buildout for Claude model family.",
+                "source_type": "major_news",
+                "magnitude": 3_500_000_000,
+                "days_ago": 7,
+                "action_insight": "Dedicated compute capital — time-box outreach to VP Infrastructure before budget locks in Q2",
+            },
+            {
+                "type": "hiring",
+                "title": "Anthropic scaling data-center ops team — 150+ infrastructure roles open",
+                "summary": "Anthropic posted senior roles in capacity planning, power procurement, and DC site selection across US/EU.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 5,
+                "action_insight": "Site selection roles indicate active evaluation — engage before final shortlist is set",
+            },
+            {
+                "type": "ai_initiative",
+                "title": "Anthropic Claude 4 series achieves SOTA on all major reasoning benchmarks",
+                "summary": "Claude 4 family requires 3× more inference compute than Claude 3, driving urgent capacity planning conversations.",
+                "source_type": "major_news",
+                "magnitude": 2.0,
+                "days_ago": 3,
+                "action_insight": "3× inference demand jump — lead with GPU-dense colocation and on-demand capacity flexibility",
+            },
+        ],
+    },
+    {
+        "company": "xAI",
+        "baseline_score": 30.0,
+        "signals": [
+            {
+                "type": "funding_completed",
+                "title": "xAI closes $6B Series B to fund Colossus 2 supercluster build",
+                "summary": "xAI raised $6B to expand its Colossus GPU cluster from 200K to 1M H100-equivalent GPUs across multiple sites.",
+                "source_type": "major_news",
+                "magnitude": 6_000_000_000,
+                "days_ago": 5,
+                "action_insight": "Multi-site cluster expansion actively planned — pitch IREN's TX/WY power access and rapid rack deployment",
+            },
+            {
+                "type": "hiring",
+                "title": "xAI posting 200+ compute infrastructure and DC operations roles",
+                "summary": "Roles span GPU cluster management, power infrastructure, cooling systems, and site reliability engineering.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 8,
+                "action_insight": "DC ops hiring signals immediate capacity need — lead with operational co-location vs. build costs",
+            },
+            {
+                "type": "outgrowing",
+                "title": "xAI Grok inference demand outpacing current Memphis facility by 3×",
+                "summary": "Public usage data shows Grok inference requests surging; xAI ops team publicly acknowledging capacity constraints.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 3,
+                "action_insight": "Active capacity crunch — urgency play, offer rapid provisioning SLA and dedicated power block",
+            },
+        ],
+    },
+    {
+        "company": "Databricks",
+        "baseline_score": 18.0,
+        "signals": [
+            {
+                "type": "fundraising",
+                "title": "Databricks in talks to raise $2B+ pre-IPO round at $62B valuation",
+                "summary": "New capital earmarked for GPU infrastructure to support Mosaic AI and DBRX model training at scale.",
+                "source_type": "major_news",
+                "magnitude": 2_000_000_000,
+                "days_ago": 6,
+                "action_insight": "Pre-IPO capital raise signals accelerating AI infrastructure spend — engage CFO/CTO on capacity roadmap",
+            },
+            {
+                "type": "hiring",
+                "title": "Databricks adding 80+ ML infrastructure and GPU cluster engineers",
+                "summary": "Databricks posted roles for GPU cluster operators, distributed training specialists, and power infrastructure managers.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 9,
+                "action_insight": "ML infra hiring indicates training cluster expansion — position colocation for burst training workloads",
+            },
+        ],
+    },
+    {
+        "company": "Palantir",
+        "baseline_score": 16.0,
+        "signals": [
+            {
+                "type": "cloud_spend",
+                "title": "Palantir AIP platform GPU spend up 4× YoY, on-prem AI deployments accelerating",
+                "summary": "Palantir's AIP (AI Platform) drives GPU demand for enterprise deployments; on-prem preferred for classified work.",
+                "source_type": "major_news",
+                "magnitude": 1.0,
+                "days_ago": 4,
+                "action_insight": "4× GPU spend increase with on-prem preference — pitch colocation adjacent to government facilities",
+            },
+            {
+                "type": "hiring",
+                "title": "Palantir hiring DC infrastructure leads for US government AI clusters",
+                "summary": "12 roles in secure facility management, power infrastructure, and GPU deployment for classified AI workloads.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 7,
+                "action_insight": "Government cluster build — lead with IREN's FEDRAMP-eligible facilities and security posture",
+            },
+        ],
+    },
+    # -------------------------------------------------------------------------
+    # MID-SIZE (5)
+    # -------------------------------------------------------------------------
+    {
+        "company": "Cohere",
+        "baseline_score": 14.0,
+        "signals": [
+            {
+                "type": "fundraising",
+                "title": "Cohere raising $500M Series D to expand enterprise AI training capacity",
+                "summary": "Round led by PSP Investments; funds dedicated to proprietary GPU cluster for Command R training.",
+                "source_type": "major_news",
+                "magnitude": 500_000_000,
+                "days_ago": 5,
+                "action_insight": "Dedicated training cluster investment — outreach window open before compute contracts finalize",
+            },
+            {
+                "type": "hiring",
+                "title": "Cohere posting 40+ ML infrastructure roles for training cluster team",
+                "summary": "Hiring for GPU cluster operators, networking engineers, and power procurement specialists.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 8,
+                "action_insight": "Training cluster team build — position colocation with flexible power contracts",
+            },
+        ],
+    },
+    {
+        "company": "Scale AI",
+        "baseline_score": 16.0,
+        "signals": [
+            {
+                "type": "ai_initiative",
+                "title": "Scale AI launches RLHF-at-scale platform requiring 10× GPU training capacity",
+                "summary": "New RLHF offering for enterprise customers demands dedicated GPU clusters; Scale partnering with hyperscalers but evaluating on-prem.",
+                "source_type": "major_news",
+                "magnitude": 2.0,
+                "days_ago": 4,
+                "action_insight": "On-prem evaluation active — pitch colocation vs. hyperscaler cost arbitrage for RLHF workloads",
+            },
+            {
+                "type": "hiring",
+                "title": "Scale AI adding 60+ compute infrastructure engineers ahead of enterprise AI platform launch",
+                "summary": "Infrastructure hiring surge focused on GPU cluster management and training pipeline reliability.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 7,
+                "action_insight": "Platform launch signals compute urgency — lead with deployment speed and colocation flexibility",
+            },
+        ],
+    },
+    {
+        "company": "Mistral AI",
+        "baseline_score": 12.0,
+        "signals": [
+            {
+                "type": "fundraising",
+                "title": "Mistral AI raising €600M Series C to fund US and EU training infrastructure",
+                "summary": "New funding round focuses on building proprietary clusters in both EU and US to reduce cloud dependency.",
+                "source_type": "major_news",
+                "magnitude": 660_000_000,
+                "days_ago": 6,
+                "action_insight": "US cluster build actively planned — engage VP Infra on colocation with IREN's US power assets",
+            },
+            {
+                "type": "ai_initiative",
+                "title": "Mistral Mixtral 8x22B requires 3× prior training compute; US cluster expansion underway",
+                "summary": "Latest MoE model training costs driving Mistral to evaluate US-based colocation for cost and latency.",
+                "source_type": "industry_news",
+                "magnitude": 1.5,
+                "days_ago": 3,
+                "action_insight": "Active cluster evaluation — lead with IREN's power pricing vs. AWS/GCP GPU instance costs",
+            },
+        ],
+    },
+    {
+        "company": "Snowflake",
+        "baseline_score": 14.0,
+        "signals": [
+            {
+                "type": "cloud_spend",
+                "title": "Snowflake Cortex AI GPU compute cost up 3× QoQ as enterprise AI queries surge",
+                "summary": "Snowflake's AI-native SQL product drives massive GPU demand; evaluating on-prem GPU clusters for cost control.",
+                "source_type": "major_news",
+                "magnitude": 1.0,
+                "days_ago": 5,
+                "action_insight": "Cost pressure from GPU cloud spend — pitch colocation + dedicated GPU blocks for Cortex workloads",
+            },
+            {
+                "type": "hiring",
+                "title": "Snowflake hiring 30+ GPU infrastructure engineers for Cortex AI platform",
+                "summary": "Roles in GPU fleet management, inference optimization, and data-center power management.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 9,
+                "action_insight": "Building in-house GPU capability — engage before they commit to a colocation partner",
+            },
+        ],
+    },
+    {
+        "company": "ServiceNow",
+        "baseline_score": 12.0,
+        "signals": [
+            {
+                "type": "ai_initiative",
+                "title": "ServiceNow Now Assist AI agents require dedicated GPU inference cluster per enterprise",
+                "summary": "Enterprise AI agent platform drives per-customer GPU allocation; evaluating on-prem colocation to meet data-residency requirements.",
+                "source_type": "major_news",
+                "magnitude": 1.5,
+                "days_ago": 4,
+                "action_insight": "Data-residency requirements favor colocation — lead with IREN's secure facilities and SLA guarantees",
+            },
+            {
+                "type": "cloud_spend",
+                "title": "ServiceNow AI compute budget up 180% YoY, cloud cost optimization a board priority",
+                "summary": "Board-level focus on GPU cloud cost reduction; ServiceNow actively evaluating colocation partners.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 7,
+                "action_insight": "Board-level cost mandate — ROI story: colocation vs. Azure/AWS GPU instance cost at scale",
+            },
+        ],
+    },
+    # -------------------------------------------------------------------------
+    # SMALL / EMERGING (5)
+    # -------------------------------------------------------------------------
+    {
+        "company": "Groq",
+        "baseline_score": 8.0,
+        "signals": [
+            {
+                "type": "fundraising",
+                "title": "Groq raises $640M Series D to expand LPU inference network globally",
+                "summary": "Capital funds deployment of GroqCloud inference PoPs across US, EU, and APAC; evaluating colocation partners.",
+                "source_type": "major_news",
+                "magnitude": 640_000_000,
+                "days_ago": 5,
+                "action_insight": "Global colocation expansion actively underway — pitch IREN's US locations and power density for LPU racks",
+            },
+            {
+                "type": "hiring",
+                "title": "Groq adding 25+ DC operations and hardware deployment specialists",
+                "summary": "Roles in custom hardware deployment, power management, and colocation partner coordination.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 8,
+                "action_insight": "DC ops hiring confirms site expansion — engage facilities team directly on rack and power SLAs",
+            },
+        ],
+    },
+    {
+        "company": "Perplexity AI",
+        "baseline_score": 7.0,
+        "signals": [
+            {
+                "type": "fundraising",
+                "title": "Perplexity AI raising $500M Series C at $9B valuation for inference infrastructure",
+                "summary": "New round specifically targets inference GPU cluster expansion; Perplexity processing 100M+ daily queries.",
+                "source_type": "major_news",
+                "magnitude": 500_000_000,
+                "days_ago": 6,
+                "action_insight": "Inference cluster expansion with active budget — lead with IREN's low-latency colocation and power pricing",
+            },
+            {
+                "type": "outgrowing",
+                "title": "Perplexity query volume up 10× YoY; current colocation capacity insufficient",
+                "summary": "Perplexity's rapid growth is straining existing AWS and colocation capacity; evaluating multi-site expansion.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 4,
+                "action_insight": "Active capacity crunch — urgency play, offer rapid provisioning with flexible contract terms",
+            },
+        ],
+    },
+    {
+        "company": "Together AI",
+        "baseline_score": 6.0,
+        "signals": [
+            {
+                "type": "ai_initiative",
+                "title": "Together AI launches open-source inference platform requiring 5× current GPU capacity",
+                "summary": "Together's FlashAttention-powered inference platform gains enterprise adoption; GPU capacity is primary growth constraint.",
+                "source_type": "major_news",
+                "magnitude": 1.5,
+                "days_ago": 5,
+                "action_insight": "Capacity-constrained growth — pitch dedicated colocation block with power pricing below cloud GPU rates",
+            },
+            {
+                "type": "hiring",
+                "title": "Together AI adding 20+ infrastructure engineers for inference cluster scaling",
+                "summary": "Hiring for GPU fleet operations, networking, and distributed inference management.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 9,
+                "action_insight": "Building in-house ops capability — engage before they sign a long-term colocation deal elsewhere",
+            },
+        ],
+    },
+    {
+        "company": "Modal",
+        "baseline_score": 5.0,
+        "signals": [
+            {
+                "type": "fundraising",
+                "title": "Modal raises $150M Series B to expand serverless GPU cloud infrastructure",
+                "summary": "Round funds expansion of Modal's serverless GPU platform; evaluating colocation partners for US East and West.",
+                "source_type": "major_news",
+                "magnitude": 150_000_000,
+                "days_ago": 7,
+                "action_insight": "Active colocation partner search — engage BD team with IREN's power density and speed-to-rack",
+            },
+            {
+                "type": "ai_initiative",
+                "title": "Modal platform GPU utilization hits 94%; new regions needed to meet demand",
+                "summary": "Modal blog confirms near-capacity utilization; new US region planned for H1 2026.",
+                "source_type": "blog",
+                "magnitude": 1.0,
+                "days_ago": 3,
+                "action_insight": "New region buildout imminent — time-sensitive pitch opportunity before site is selected",
+            },
+        ],
+    },
+    {
+        "company": "Anyscale",
+        "baseline_score": 6.0,
+        "signals": [
+            {
+                "type": "ai_initiative",
+                "title": "Anyscale RayTrain framework adoption surges 8× among Fortune 500 AI teams",
+                "summary": "Enterprise Ray adoption drives colocation demand as customers want on-prem training vs. public cloud.",
+                "source_type": "industry_news",
+                "magnitude": 1.5,
+                "days_ago": 4,
+                "action_insight": "Enterprise on-prem training trend — lead with IREN's colocation + power cost vs. AWS training instances",
+            },
+            {
+                "type": "hiring",
+                "title": "Anyscale hiring 15+ data-center and GPU infrastructure specialists",
+                "summary": "Roles in GPU cluster management, site reliability, and colocation partner management.",
+                "source_type": "industry_news",
+                "magnitude": 1.0,
+                "days_ago": 8,
+                "action_insight": "Building DC ops team — engage before internal team commits to a specific vendor",
+            },
+        ],
+    },
+]
+
+
+def seed_demo_signals(session=None) -> None:
+    """Seed realistic demo signals for 15 diverse companies and generate score history.
+
+    Idempotent: skips if the signals table already has rows.
+    After seeding, every target company will have two ProspectScore rows
+    (a lower baseline dated 14 days ago, then a freshly computed current score)
+    so get_score_deltas() returns a positive delta for each — populating the
+    Today page Call List immediately after first run.
+    """
+    from datetime import timedelta
+
+    from database.db import get_session, init_db
+    from database.models import ProspectScore, Signal
+    from scoring.engine import score_all_prospects
+
+    init_db()
+    own_session = session is None
+    if own_session:
+        session = get_session()
+
+    try:
+        if session.query(Signal).count() > 0:
+            print("Demo signals already present — skipping seed_demo_signals().")
+            return
+
+        now = datetime.now(timezone.utc)
+        company_map = {c.name: c for c in session.query(Company).all()}
+
+        # 1. Insert baseline (previous) ProspectScore rows dated 14 days ago
+        #    with a lower total_score so the current rescore produces a positive delta.
+        baseline_date = now - timedelta(days=14)
+        baseline_count = 0
+        for entry in SEED_SIGNALS:
+            company = company_map.get(entry["company"])
+            if not company:
+                print(f"  [skip] {entry['company']} not found in DB — run seed_database() first.")
+                continue
+            session.add(
+                ProspectScore(
+                    company_id=company.id,
+                    total_score=entry["baseline_score"],
+                    scored_at=baseline_date,
+                )
+            )
+            baseline_count += 1
+
+        session.commit()
+        print(f"Inserted {baseline_count} baseline ProspectScore rows (14 days ago).")
+
+        # 2. Insert Signal rows for each company
+        signal_count = 0
+        for entry in SEED_SIGNALS:
+            company = company_map.get(entry["company"])
+            if not company:
+                continue
+            for s in entry["signals"]:
+                detected_at = now - timedelta(days=s["days_ago"])
+                session.add(
+                    Signal(
+                        company_id=company.id,
+                        signal_type=s["type"],
+                        title=s["title"],
+                        summary=s.get("summary", ""),
+                        source_type=s.get("source_type", "industry_news"),
+                        magnitude=s.get("magnitude", 1.0),
+                        is_active=True,
+                        action_insight=s.get("action_insight"),
+                        detected_at=detected_at,
+                    )
+                )
+                signal_count += 1
+
+        session.commit()
+        print(f"Inserted {signal_count} demo signals across {len(SEED_SIGNALS)} companies.")
+
+    finally:
+        if own_session:
+            session.close()
+
+    # 3. Compute current scores — creates a new ProspectScore row per company
+    #    dated "now", which will be higher than the 14-day-old baseline.
+    print("Scoring all prospects to generate current score snapshot...")
+    score_all_prospects()
+    print("Demo signals seeded. Today page Call List should now show 10+ entries.")
 
 
 def seed_database(use_web_search: bool = False, run_embed_after: bool = False):
@@ -3214,6 +3848,8 @@ def seed_database(use_web_search: bool = False, run_embed_after: bool = False):
     print(f"Seeded {contact_count} persona contacts.")
     session.close()
 
+    seed_demo_signals()
+
     if run_embed_after:
         from ai.embed_backfill import backfill_embeddings
         print("Running local embedding backfill (Ollama)...")
@@ -3242,6 +3878,8 @@ if __name__ == "__main__":
     import sys
     if "--expand" in sys.argv:
         expand_prospects()
+    elif "--demo" in sys.argv:
+        seed_demo_signals()
     else:
         use_web_search = "--web-search" in sys.argv
         run_embed_after = "--embed" in sys.argv

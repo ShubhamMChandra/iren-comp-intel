@@ -5,19 +5,21 @@ alwaysApply: true
 
 # LLM Framework
 
-## Three-Tier Model Strategy
+## Four-Tier Model Strategy
 
 | Tier | Model | Price (in/out per M) | When |
 |---|---|---|---|
 | Free | Ollama `nomic-embed-text` (local) | $0 | All embeddings, dedup, semantic search |
 | Bulk | Gemini 2.5 Flash (`google/gemini-2.5-flash`) | $0.30 / $2.50 | Signal classification, article summaries |
-| Analysis | Kimi K2 (`moonshotai/kimi-k2`) | $0.55 / $2.20 | Briefs, emails, battle cards, digest |
+| Analysis | Kimi K2 (`moonshotai/kimi-k2`) | $0.55 / $2.20 | Briefs, emails, battle cards |
+| Premium | Opus 4.6 (`anthropic/claude-4.6-opus-20260205`) | $5.00 / $25.00 | Daily digest only (2x/day, cached) |
 
 ## Budget: $15 Total
 
 - Collection runs (bulk): ~$0.15/run × ~30 runs = ~$4.50
-- Analysis (briefs, emails, digest): ~$0.05/request × ~100 = ~$5.00
-- Buffer for iteration/testing: ~$5.50
+- Analysis (briefs, emails, battle cards): ~$0.05/request × ~50 = ~$2.50
+- Premium digest: ~$0.10/digest × 2/day × 30 days = ~$6.00
+- Buffer for iteration/testing: ~$2.00
 
 ## Module-to-Tier Map
 
@@ -25,26 +27,30 @@ alwaysApply: true
 - `ai/summarizer.py` → Bulk (`call_bulk()`)
 - `ai/signal_extractor.py` → Bulk (`call_bulk()`)
 - `ai/brief_generator.py` → Analysis (`call_with_fallback()`)
-- `api/main.py` digest → Analysis (`call_with_fallback()`)
+- `api/main.py` digest → Premium (`call_premium()`) with adaptive thinking
 - `collectors/*.py` → Free (dedup) + Bulk (if classifying)
 
 ## Rules for New AI Calls
 
 - Collection/enrichment pipelines → always bulk tier
 - User-facing generation (cached) → always analysis tier
+- Daily digest → premium tier (Opus 4.6 with adaptive thinking)
 - Embeddings → always Ollama, never OpenRouter
 - Every LLM call must have a keyword-based fallback that works with no API key
 - Never hardcode model names — read from `config.py` env vars
+- Never hardcode Iren product data in prompts — read from `IREN_BENCHMARK` via `_build_iren_context()`
 - Bulk tier falls back to keyword extraction on failure — never escalates to analysis tier
+- Premium tier falls back to analysis tier on failure
 
 ## Client API
 
 ```python
-from ai.client import get_ai_client, call_bulk, call_with_fallback
+from ai.client import get_ai_client, call_bulk, call_with_fallback, call_premium
 
 client = get_ai_client()
 call_bulk(client, messages)           # Gemini Flash, falls back to keywords
 call_with_fallback(client, messages)  # K2, falls back to Gemini Flash
+call_premium(client, messages)        # Opus 4.6 (adaptive thinking), falls back to K2
 ```
 
 ## Buyer Journey Signal Map

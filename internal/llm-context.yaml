@@ -1,0 +1,213 @@
+# Iren Sales Intelligence — machine-readable context for LLM-assisted development.
+# Regenerate with: python scripts/generate_llm_context.py
+# Schema: project metadata, layout, API surface, types, conventions, task checklists.
+
+project:
+  name: iren-comp-intel
+  description: Sales intelligence for Iren commercial team; prospect scoring and competitive intel.
+  stack:
+    backend: Python 3.14, FastAPI, SQLAlchemy 2.x, SQLite
+    frontend: Next.js 16, React 19, TypeScript
+    ai: OpenRouter (generation), Ollama (embeddings only)
+  database_path: data/iren_intel.db
+
+layout:
+  backend:
+    config.py: "Env vars, SIGNAL_TYPES, SIGNAL_LABELS, feeds, Ollama/OpenRouter config"
+    database/models.py: "Company, Signal, ProspectScore, ProspectBrief, CompetitorEvent, Contact"
+    database/db.py: "get_session(), init_db()"
+    database/seed.py: "PROSPECTS, COMPETITORS seed data"
+    database/seed_web.py: "Web seed entrypoint"
+    scoring/weights.py: "SIGNAL_WEIGHTS, MAGNITUDE_THRESHOLDS (max_points sum = 100)"
+    scoring/engine.py: "score_prospect(), score_all_prospects(), recency decay"
+    scoring/timing.py: "TIMING_WINDOWS, get_action_insight(), get_urgency()"
+    ai/embeddings.py: "get_embedding(), cosine_similarity(), dedup (Ollama)"
+    ai/summarizer.py: "OpenRouter + fallback"
+    ai/signal_extractor.py: "OpenRouter + fallback"
+    ai/brief_generator.py: "generate_brief, generate_outreach_email, generate_battle_card"
+    ai/client.py: "get_ai_client(), call_with_fallback()"
+    collectors/base.py: "BaseCollector, _create_signal(), dedup"
+    collectors/runner.py: "COLLECTORS dict; register new collectors here"
+    collectors/news_collector.py: "RSS + Google News"
+    collectors/funding_collector.py: "Funding regex classification"
+    collectors/jobs_collector.py: "Infrastructure hiring keywords"
+    collectors/sec_collector.py: "SEC EDGAR"
+  api:
+    api/main.py: "FastAPI app; all /api/* routes; RequestLogMiddleware"
+  frontend:
+    frontend/src/lib/api.ts: "fetchAPI wrapper; all get* / generate* / smartSearch exports"
+    frontend/src/lib/types.ts: "Prospect, Signal, Competitor, Tier, ProspectScore, etc."
+    frontend/src/app: "Next.js app router pages (admin, compete, prospects)"
+
+backend_api:
+  base_path: /api
+  routes:
+  - path: '/api/prospects'
+    method: GET
+    handler: list_prospects
+  - path: '/api/prospects/{prospect_id}'
+    method: GET
+    handler: get_prospect
+  - path: '/api/signals'
+    method: GET
+    handler: list_signals
+  - path: '/api/signals/stats'
+    method: GET
+    handler: signal_stats
+  - path: '/api/competitors'
+    method: GET
+    handler: list_competitors
+  - path: '/api/competitors/{competitor_id}'
+    method: GET
+    handler: get_competitor
+  - path: '/api/dashboard'
+    method: GET
+    handler: dashboard
+  - path: '/api/dashboard/digest'
+    method: GET
+    handler: dashboard_digest
+  - path: '/api/briefs/generate'
+    method: POST
+    handler: gen_brief
+  - path: '/api/briefs/email'
+    method: POST
+    handler: gen_email
+  - path: '/api/briefs/battlecard'
+    method: POST
+    handler: gen_battlecard
+  - path: '/api/search'
+    method: POST
+    handler: smart_search
+  - path: '/api/admin/stats'
+    method: GET
+    handler: admin_stats
+  - path: '/api/admin/seed'
+    method: POST
+    handler: seed_db
+  - path: '/api/admin/rescore'
+    method: POST
+    handler: rescore
+
+
+frontend_api:
+  base_url: "process.env.NEXT_PUBLIC_API_URL || http://localhost:8000"
+  functions:
+  - name: getDashboard
+    path: '/api/dashboard'
+    method: GET
+  - name: getDashboardDigest
+    path: '/api/dashboard/digest'
+    method: GET
+  - name: getProspects
+    path: '/api/prospects'
+    method: GET
+  - name: getProspect
+    path: '/api/prospects'
+    method: GET
+  - name: getSignals
+    path: '/api/signals'
+    method: GET
+  - name: getSignalStats
+    path: '/api/signals/stats'
+    method: GET
+  - name: getCompetitors
+    path: '/api/competitors'
+    method: GET
+  - name: getCompetitor
+    path: '/api/competitors'
+    method: GET
+  - name: generateBrief
+    path: '/api/briefs/generate'
+    method: POST
+  - name: generateEmail
+    path: '/api/briefs/email'
+    method: POST
+  - name: generateBattlecard
+    path: '/api/briefs/battlecard'
+    method: POST
+  - name: smartSearch
+    path: '/api/search'
+    method: POST
+  - name: getAdminStats
+    path: '/api/admin/stats'
+    method: GET
+  - name: seedDatabase
+    path: '/api/admin/seed'
+    method: POST
+  - name: rescoreAll
+    path: '/api/admin/rescore'
+    method: POST
+
+types:
+  backend_models:
+    Company: "database/models.py; company_type prospect|competitor"
+    Signal: "database/models.py; signal_type, source_type, magnitude, embedding (JSON)"
+    ProspectScore: "database/models.py; per-category scores + total_score, scored_at"
+    ProspectBrief: "database/models.py; brief_type, brief_text"
+    CompetitorEvent: "database/models.py; event_type"
+    Contact: "database/models.py"
+  frontend_types:
+    Prospect: "frontend/src/lib/types.ts; score, delta, tier, signals_7d"
+    Competitor: "frontend/src/lib/types.ts; segment, signal_count_30d, events"
+    Signal: "frontend/src/lib/types.ts"
+    ProspectScore: "frontend/src/lib/types.ts; total + 6 category scores"
+    Tier: "VERY HIGH | HIGH | MEDIUM | LOW | DORMANT"
+    SignalType: "fundraising | funding_completed | hiring | ai_initiative | cloud_spend | outgrowing"
+
+conventions:
+  signal_types:
+    - fundraising
+    - funding_completed
+    - hiring
+    - ai_initiative
+    - cloud_spend
+    - outgrowing
+    - other
+  source_types:
+    - sec_filing
+    - major_news
+    - industry_news
+    - blog
+    - social_media
+    - rumor
+  company_type: ["prospect", "competitor"]
+  scoring: "6 categories, max 100 total; recency decay; every AI fn has _fallback_*"
+  ollama: "Embeddings only (nomic-embed-text); never generation"
+
+task_checklists:
+  add_signal_type:
+    steps:
+      - file: config.py
+        action: "Add to SIGNAL_TYPES, SIGNAL_LABELS, SIGNAL_DESCRIPTIONS"
+      - file: scoring/weights.py
+        action: "Add to SIGNAL_WEIGHTS (max_points, base_points, recency_halflife_days); keep sum(max_points) = 100"
+      - file: database/models.py
+        action: "Add <name>_score column to ProspectScore"
+      - file: scoring/engine.py
+        action: "Add field to ProspectScore(...) in score_prospect()"
+      - files: ["pages/dashboard.py", "pages/prospects.py", "pages/signal_feed.py"]
+        action: "Add icon to TYPE_ICONS (if present in frontend, check frontend components)"
+      - file: tests/test_scoring.py
+        action: "Update test_all_signal_types_have_weights and test_max_points_sum_to_100"
+      - run: "python scripts/update_readme.py"
+      - run: "pytest"
+  add_collector:
+    steps:
+      - file: "collectors/<name>_collector.py"
+        action: "Create class inheriting BaseCollector; collector_name = '<name>'; implement collect(), use _create_signal(), call self.finish()"
+      - file: collectors/runner.py
+        action: "Register in COLLECTORS dict"
+      - file: tests/test_collectors.py
+        action: "Add tests"
+  add_company:
+    steps:
+      - file: database/seed.py
+        action: "Add dict to PROSPECTS or COMPETITORS (name, industry, website, description, hq_location)"
+    alternative: "Settings page → Manage Companies (UI)"
+  rescore_after_changes:
+    run: "python -c \"from scoring.engine import score_all_prospects; score_all_prospects()\""
+  backfill_embeddings:
+    run: "python -m ai.embed_backfill"
+    optional_force: "python -m ai.embed_backfill --force"
+  update_readme:
+    run: "python scripts/update_readme.py"

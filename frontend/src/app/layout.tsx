@@ -21,12 +21,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} forcedTheme="dark">
           <TooltipProvider>
             <SidebarProvider>
-              <div className="flex min-h-screen w-full">
-                <AppSidebar />
-                <main className="flex-1 overflow-auto">
-                  {children}
-                </main>
-              </div>
+              <AppSidebar />
+              <main className="flex-1 overflow-auto">
+                {children}
+              </main>
               <CommandPalette />
             </SidebarProvider>
           </TooltipProvider>

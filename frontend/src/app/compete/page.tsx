@@ -9,11 +9,9 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SignalBadge } from "@/components/signal-badge"
-import { getLandscape, generateBattlecard } from "@/lib/api"
+import { getLandscape, getDealThreats, generateBattlecard } from "@/lib/api"
 import { cn, formatDate } from "@/lib/utils"
-import type { LandscapeData, Competitor, ActivityFeedItem } from "@/lib/types"
+import type { LandscapeData, Competitor, ActivityFeedItem, DealThreat, DealThreatsData } from "@/lib/types"
 import {
   Globe,
   Swords,
@@ -23,15 +21,17 @@ import {
   ArrowUp,
   ArrowDown,
   Activity,
-  LayoutGrid,
   Shield,
   TrendingUp,
   Zap,
-  ChevronRight,
   ExternalLink,
   AlertTriangle,
   CheckCircle,
   MinusCircle,
+  Flame,
+  Target,
+  BookOpen,
+  ChevronRight,
 } from "lucide-react"
 
 type SortKey = "capacity_mw" | "gpu_count" | "signal_count_30d" | "name" | "threat_level"
@@ -43,12 +43,13 @@ const SEGMENT_COLORS: Record<string, string> = {
   "DC REIT": "text-cyan-400 bg-cyan-400/10 border-cyan-400/20",
   "Power-First": "text-orange-400 bg-orange-400/10 border-orange-400/20",
   "International": "text-pink-400 bg-pink-400/10 border-pink-400/20",
+  "Miner-to-HPC": "text-amber-400 bg-amber-400/10 border-amber-400/20",
   "Data Center": "text-zinc-400 bg-zinc-400/10 border-zinc-400/20",
 }
 
 const THREAT_CONFIG: Record<string, { color: string; icon: typeof AlertTriangle; label: string }> = {
-  high: { color: "text-red-400 bg-red-400/10 border-red-400/30", icon: AlertTriangle, label: "High Threat" },
-  medium: { color: "text-amber-400 bg-amber-400/10 border-amber-400/30", icon: MinusCircle, label: "Medium" },
+  high: { color: "text-red-400 bg-red-400/10 border-red-400/30", icon: AlertTriangle, label: "High" },
+  medium: { color: "text-amber-400 bg-amber-400/10 border-amber-400/30", icon: MinusCircle, label: "Med" },
   low: { color: "text-green-400 bg-green-400/10 border-green-400/30", icon: CheckCircle, label: "Low" },
 }
 
@@ -100,28 +101,68 @@ function SortIcon({ sortKey, currentKey, dir }: { sortKey: SortKey; currentKey: 
 
 export default function CompetePage() {
   const [data, setData] = useState<LandscapeData | null>(null)
+  const [threats, setThreats] = useState<DealThreatsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [battlecard, setBattlecard] = useState<string | null>(null)
   const [bcLoading, setBcLoading] = useState(false)
-  const [sortKey, setSortKey] = useState<SortKey>("capacity_mw")
+  const [sortKey, setSortKey] = useState<SortKey>("threat_level")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [activeSegment, setActiveSegment] = useState<string | null>(null)
-  const [compareA, setCompareA] = useState<string>("")
-  const [compareB, setCompareB] = useState<string>("")
   const [activityFilter, setActivityFilter] = useState<string>("all")
 
   useEffect(() => {
-    getLandscape()
-      .then(setData)
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    Promise.all([
+      getLandscape().catch(() => null),
+      getDealThreats().catch(() => null),
+    ]).then(([landscape, dealThreats]) => {
+      setData(landscape)
+      setThreats(dealThreats)
+      setLoading(false)
+    })
   }, [])
 
   const competitors = useMemo(() => data?.competitors ?? [], [data?.competitors])
   const iren = data?.iren ?? null
-  const segments = data?.segments ?? []
   const activityFeed = data?.activity_feed ?? []
+
+  const eventsThisWeek = activityFeed.filter((item) => {
+    if (!item.detected_at) return false
+    const d = new Date(item.detected_at)
+    const week = new Date()
+    week.setDate(week.getDate() - 7)
+    return d >= week
+  }).length
+
+  const hottestCompetitor = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const item of activityFeed) {
+      if (!item.detected_at) continue
+      const d = new Date(item.detected_at)
+      const week = new Date()
+      week.setDate(week.getDate() - 7)
+      if (d >= week) {
+        counts[item.company_name] = (counts[item.company_name] || 0) + 1
+      }
+    }
+    let top = "—"
+    let topCount = 0
+    for (const [name, count] of Object.entries(counts)) {
+      if (count > topCount) {
+        top = name
+        topCount = count
+      }
+    }
+    return { name: top, count: topCount }
+  }, [activityFeed])
+
+  const dealThreatCount = threats?.total_at_risk ?? 0
+
+  const maxCapacity = useMemo(() => {
+    const all = [...competitors.map((c) => c.capacity_mw ?? 0)]
+    if (iren?.capacity_mw) all.push(iren.capacity_mw)
+    return Math.max(...all, 1)
+  }, [competitors, iren])
 
   const segmentCounts = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -130,15 +171,6 @@ export default function CompetePage() {
     }
     return Object.entries(counts).sort((a, b) => b[1] - a[1])
   }, [competitors])
-
-  const maxCapacity = useMemo(() => {
-    const all = [...competitors.map((c) => c.capacity_mw ?? 0)]
-    if (iren?.capacity_mw) all.push(iren.capacity_mw)
-    return Math.max(...all, 1)
-  }, [competitors, iren])
-
-  const highThreatCount = useMemo(() => competitors.filter((c) => c.threat_level === "high").length, [competitors])
-  const totalSignals30d = useMemo(() => competitors.reduce((sum, c) => sum + c.signal_count_30d, 0), [competitors])
 
   const threatOrder: Record<string, number> = { high: 0, medium: 1, low: 2 }
 
@@ -163,12 +195,6 @@ export default function CompetePage() {
   }, [competitors, activeSegment, sortKey, sortDir])
 
   const selected = competitors.find((c) => c.id === selectedId) ?? null
-
-  const compA = useMemo(() => {
-    if (compareA === "iren") return null
-    return competitors.find((c) => String(c.id) === compareA) ?? null
-  }, [competitors, compareA])
-  const compB = useMemo(() => competitors.find((c) => String(c.id) === compareB) ?? null, [competitors, compareB])
 
   const filteredActivity = useMemo(() => {
     if (activityFilter === "all") return activityFeed
@@ -201,8 +227,8 @@ export default function CompetePage() {
     return (
       <div className="p-6 space-y-6">
         <Skeleton className="h-8 w-48" />
-        <div className="grid gap-4 grid-cols-4">
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24" />)}
+        <div className="grid gap-4 grid-cols-3">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20" />)}
         </div>
         <Skeleton className="h-96" />
       </div>
@@ -214,287 +240,67 @@ export default function CompetePage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Compete</h1>
         <p className="text-sm text-muted-foreground">
-          GTM competitive intelligence — positioning, threats, and market activity
+          Live competitive activity — what happened this week and what it means for your deals
         </p>
       </div>
 
-      {/* Summary KPIs */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-4">
+      {/* Live KPI strip */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <Card className="border-border/50 bg-card/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Competitors Tracked
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <span className="text-2xl font-semibold tabular-nums">{competitors.length}</span>
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {segmentCounts.map(([seg, count]) => (
-                <span key={seg} className="text-[10px] text-muted-foreground">{count} {seg}</span>
-              ))}
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="rounded-lg bg-primary/10 p-2">
+              <Activity className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-2xl font-semibold tabular-nums">{eventsThisWeek}</p>
+              <p className="text-[11px] text-muted-foreground">events this week</p>
             </div>
           </CardContent>
         </Card>
 
         <Card className="border-border/50 bg-card/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              High Threat
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <span className="text-2xl font-semibold tabular-nums text-red-400">{highThreatCount}</span>
-            <p className="mt-0.5 text-xs text-muted-foreground">competitors rated high threat to Iren</p>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="rounded-lg bg-amber-400/10 p-2">
+              <Flame className="h-5 w-5 text-amber-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-semibold tabular-nums truncate">{hottestCompetitor.name}</p>
+              <p className="text-[11px] text-muted-foreground">hottest competitor ({hottestCompetitor.count} events)</p>
+            </div>
           </CardContent>
         </Card>
 
         <Card className="border-border/50 bg-card/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Activity (30d)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <span className="text-2xl font-semibold tabular-nums">{totalSignals30d}</span>
-            <p className="mt-0.5 text-xs text-muted-foreground">competitor signals tracked</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Segments
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <span className="text-2xl font-semibold tabular-nums">{segments.length}</span>
-            <p className="mt-0.5 text-xs text-muted-foreground">market segments profiled</p>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="rounded-lg bg-red-400/10 p-2">
+              <Target className="h-5 w-5 text-red-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-semibold tabular-nums">{dealThreatCount}</p>
+              <p className="text-[11px] text-muted-foreground">prospects with competing activity</p>
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Three-tab layout */}
-      <Tabs defaultValue="landscape" className="space-y-4">
+      {/* Three-tab layout: Activity (default) → Deal Threats → Directory */}
+      <Tabs defaultValue="activity" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="landscape" className="gap-1.5">
-            <LayoutGrid className="h-3.5 w-3.5" /> Market Landscape
-          </TabsTrigger>
-          <TabsTrigger value="headtohead" className="gap-1.5">
-            <Swords className="h-3.5 w-3.5" /> Head-to-Head
-          </TabsTrigger>
           <TabsTrigger value="activity" className="gap-1.5">
             <Activity className="h-3.5 w-3.5" /> Activity Feed
           </TabsTrigger>
+          <TabsTrigger value="threats" className="gap-1.5">
+            <Target className="h-3.5 w-3.5" /> Deal Threats
+            {dealThreatCount > 0 && (
+              <Badge variant="destructive" className="ml-1 h-4 px-1 text-[10px]">{dealThreatCount}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="directory" className="gap-1.5">
+            <BookOpen className="h-3.5 w-3.5" /> Directory
+          </TabsTrigger>
         </TabsList>
 
-        {/* ===== TAB 1: MARKET LANDSCAPE ===== */}
-        <TabsContent value="landscape" className="space-y-4">
-          {/* Segment overview cards */}
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {segments.map((seg) => (
-              <Card
-                key={seg.name}
-                className={cn(
-                  "border-border/50 cursor-pointer transition-colors",
-                  activeSegment === seg.name ? "border-primary/50 bg-primary/5" : "hover:border-border",
-                )}
-                onClick={() => setActiveSegment(activeSegment === seg.name ? null : seg.name)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <SegmentBadge segment={seg.name} />
-                    <span className="text-lg font-semibold tabular-nums">{seg.competitor_count}</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">{seg.iren_positioning}</p>
-                  <div className="mt-2 flex items-center gap-1">
-                    <Zap className="h-3 w-3 text-amber-400" />
-                    <span className="text-[10px] text-muted-foreground">{seg.key_battleground}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Segment filter pills */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant={activeSegment === null ? "default" : "outline"}
-              className="h-7 text-xs"
-              onClick={() => setActiveSegment(null)}
-            >
-              <LayoutGrid className="mr-1 h-3 w-3" /> All
-            </Button>
-            {segmentCounts.map(([seg, count]) => (
-              <Button
-                key={seg}
-                size="sm"
-                variant={activeSegment === seg ? "default" : "outline"}
-                className="h-7 text-xs"
-                onClick={() => setActiveSegment(activeSegment === seg ? null : seg)}
-              >
-                {seg}
-                <span className="ml-1 text-muted-foreground">{count}</span>
-              </Button>
-            ))}
-          </div>
-
-          {/* Competitor Table */}
-          <Card className="border-border/50">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="cursor-pointer select-none text-xs" onClick={() => toggleSort("name")}>
-                    Company <SortIcon sortKey="name" currentKey={sortKey} dir={sortDir} />
-                  </TableHead>
-                  <TableHead className="text-xs">Segment</TableHead>
-                  <TableHead className="cursor-pointer select-none text-xs" onClick={() => toggleSort("threat_level")}>
-                    Threat <SortIcon sortKey="threat_level" currentKey={sortKey} dir={sortDir} />
-                  </TableHead>
-                  <TableHead className="cursor-pointer select-none text-xs text-right" onClick={() => toggleSort("capacity_mw")}>
-                    Capacity (MW) <SortIcon sortKey="capacity_mw" currentKey={sortKey} dir={sortDir} />
-                  </TableHead>
-                  <TableHead className="cursor-pointer select-none text-xs text-right" onClick={() => toggleSort("gpu_count")}>
-                    GPUs <SortIcon sortKey="gpu_count" currentKey={sortKey} dir={sortDir} />
-                  </TableHead>
-                  <TableHead className="text-xs">Key Customers</TableHead>
-                  <TableHead className="cursor-pointer select-none text-xs text-right" onClick={() => toggleSort("signal_count_30d")}>
-                    Activity <SortIcon sortKey="signal_count_30d" currentKey={sortKey} dir={sortDir} />
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {iren && (
-                  <TableRow className="border-[#22c55e]/20 bg-[#22c55e]/4 hover:bg-[#22c55e]/7">
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-[#22c55e]">{iren.name}</span>
-                        <Badge variant="outline" className="text-[10px] font-mono border-[#22c55e]/30 text-[#22c55e]">
-                          {iren.ticker}
-                        </Badge>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground">{iren.hq_location}</p>
-                    </TableCell>
-                    <TableCell><SegmentBadge segment={iren.segment} /></TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-[10px] text-[#22c55e] border-[#22c55e]/30">YOU</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {iren.capacity_mw ? <CapacityBar mw={iren.capacity_mw} maxMw={maxCapacity} /> : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {iren.gpu_count ? iren.gpu_count.toLocaleString() : "—"}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate">
-                      {iren.key_customers?.join(", ") || "—"}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">—</TableCell>
-                  </TableRow>
-                )}
-
-                {filtered.map((c) => (
-                  <TableRow key={c.id} className="cursor-pointer" onClick={() => { setSelectedId(c.id); setBattlecard(null) }}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{c.name}</span>
-                        {c.is_public && c.ticker && (
-                          <Badge variant="outline" className="text-[10px] font-mono">{c.ticker}</Badge>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-muted-foreground">{c.hq_location}</p>
-                    </TableCell>
-                    <TableCell><SegmentBadge segment={c.segment} /></TableCell>
-                    <TableCell><ThreatBadge level={c.threat_level} /></TableCell>
-                    <TableCell className="text-right">
-                      {c.capacity_mw ? <CapacityBar mw={c.capacity_mw} maxMw={maxCapacity} /> : <span className="text-muted-foreground">—</span>}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {c.gpu_count ? c.gpu_count.toLocaleString() : "—"}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate">
-                      {c.key_customers.length > 0 ? c.key_customers.slice(0, 3).join(", ") : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {c.signal_count_30d > 0 ? (
-                        <span className="inline-flex items-center gap-1">
-                          <Activity className="h-3 w-3 text-[#22c55e]" />
-                          {c.signal_count_30d}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">0</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-
-                {filtered.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
-                      No competitors match this filter.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </Card>
-        </TabsContent>
-
-        {/* ===== TAB 2: HEAD-TO-HEAD ===== */}
-        <TabsContent value="headtohead" className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Select value={compareA} onValueChange={setCompareA}>
-              <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="Select first..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="iren">Iren (You)</SelectItem>
-                {competitors.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <span className="text-muted-foreground font-medium">vs</span>
-            <Select value={compareB} onValueChange={setCompareB}>
-              <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="Select second..." />
-              </SelectTrigger>
-              <SelectContent>
-                {competitors.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {(compareA || compareB) ? (
-            <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-              {/* Side A */}
-              <ComparisonCard
-                title={compareA === "iren" ? "Iren" : compA?.name ?? "Select a competitor"}
-                isIren={compareA === "iren"}
-                competitor={compA}
-                iren={iren}
-              />
-              {/* Side B */}
-              <ComparisonCard
-                title={compB?.name ?? "Select a competitor"}
-                isIren={false}
-                competitor={compB}
-                iren={iren}
-              />
-            </div>
-          ) : (
-            <Card className="border-border/50">
-              <CardContent className="py-16 text-center text-muted-foreground">
-                <Swords className="h-8 w-8 mx-auto mb-3 text-muted-foreground/50" />
-                <p>Select two competitors to compare side-by-side</p>
-                <p className="text-xs mt-1">You can also compare Iren against any competitor</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* ===== TAB 3: ACTIVITY FEED ===== */}
+        {/* ===== TAB 1: ACTIVITY FEED (default) ===== */}
         <TabsContent value="activity" className="space-y-4">
           <div className="flex items-center gap-2">
             <Button size="sm" variant={activityFilter === "all" ? "default" : "outline"} className="h-7 text-xs" onClick={() => setActivityFilter("all")}>
@@ -518,14 +324,140 @@ export default function CompetePage() {
               <CardContent className="py-16 text-center text-muted-foreground">
                 <Activity className="h-8 w-8 mx-auto mb-3 text-muted-foreground/50" />
                 <p>No competitive activity found</p>
-                <p className="text-xs mt-1">Run the competitive intel collector to populate this feed</p>
+                <p className="text-xs mt-1">Run collectors to populate this feed</p>
               </CardContent>
             </Card>
           )}
         </TabsContent>
+
+        {/* ===== TAB 2: DEAL THREATS ===== */}
+        <TabsContent value="threats" className="space-y-4">
+          {threats && threats.threats.length > 0 ? (
+            <div className="space-y-3">
+              {threats.threats.map((t) => (
+                <DealThreatCard key={t.prospect_id} threat={t} />
+              ))}
+            </div>
+          ) : (
+            <Card className="border-border/50">
+              <CardContent className="py-16 text-center text-muted-foreground">
+                <Target className="h-8 w-8 mx-auto mb-3 text-muted-foreground/50" />
+                <p>No deal threats detected</p>
+                <p className="text-xs mt-1">Threats appear when competitor activity overlaps with high-scoring prospects</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ===== TAB 3: DIRECTORY ===== */}
+        <TabsContent value="directory" className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant={activeSegment === null ? "default" : "outline"}
+              className="h-7 text-xs"
+              onClick={() => setActiveSegment(null)}
+            >
+              All ({competitors.length})
+            </Button>
+            {segmentCounts.map(([seg, count]) => (
+              <Button
+                key={seg}
+                size="sm"
+                variant={activeSegment === seg ? "default" : "outline"}
+                className="h-7 text-xs"
+                onClick={() => setActiveSegment(activeSegment === seg ? null : seg)}
+              >
+                {seg}
+                <span className="ml-1 text-muted-foreground">{count}</span>
+              </Button>
+            ))}
+          </div>
+
+          <Card className="border-border/50">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="cursor-pointer select-none text-xs" onClick={() => toggleSort("name")}>
+                    Company <SortIcon sortKey="name" currentKey={sortKey} dir={sortDir} />
+                  </TableHead>
+                  <TableHead className="text-xs">Segment</TableHead>
+                  <TableHead className="cursor-pointer select-none text-xs" onClick={() => toggleSort("threat_level")}>
+                    Threat <SortIcon sortKey="threat_level" currentKey={sortKey} dir={sortDir} />
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none text-xs" onClick={() => toggleSort("capacity_mw")}>
+                    MW <SortIcon sortKey="capacity_mw" currentKey={sortKey} dir={sortDir} />
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none text-xs text-right" onClick={() => toggleSort("signal_count_30d")}>
+                    Activity <SortIcon sortKey="signal_count_30d" currentKey={sortKey} dir={sortDir} />
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {iren && (
+                  <TableRow className="border-[#22c55e]/20 bg-[#22c55e]/4 hover:bg-[#22c55e]/7">
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-[#22c55e]">{iren.name}</span>
+                        <Badge variant="outline" className="text-[10px] font-mono border-[#22c55e]/30 text-[#22c55e]">
+                          {iren.ticker}
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell><SegmentBadge segment={iren.segment} /></TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px] text-[#22c55e] border-[#22c55e]/30">YOU</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {iren.capacity_mw ? <CapacityBar mw={iren.capacity_mw} maxMw={maxCapacity} /> : "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">—</TableCell>
+                  </TableRow>
+                )}
+
+                {filtered.map((c) => (
+                  <TableRow key={c.id} className="cursor-pointer" onClick={() => { setSelectedId(c.id); setBattlecard(null) }}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{c.name}</span>
+                        {c.is_public && c.ticker && (
+                          <Badge variant="outline" className="text-[10px] font-mono">{c.ticker}</Badge>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">{c.hq_location}</p>
+                    </TableCell>
+                    <TableCell><SegmentBadge segment={c.segment} /></TableCell>
+                    <TableCell><ThreatBadge level={c.threat_level} /></TableCell>
+                    <TableCell>
+                      {c.capacity_mw ? <CapacityBar mw={c.capacity_mw} maxMw={maxCapacity} /> : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {c.signal_count_30d > 0 ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Activity className="h-3 w-3 text-[#22c55e]" />
+                          {c.signal_count_30d}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+
+                {filtered.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-12 text-center text-muted-foreground">
+                      No competitors match this filter.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Card>
+        </TabsContent>
       </Tabs>
 
-      {/* Detail Sheet */}
+      {/* Detail Sheet with comparison built in */}
       <Sheet open={selectedId !== null} onOpenChange={(open) => { if (!open) setSelectedId(null) }}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           {selected ? (
@@ -547,6 +479,32 @@ export default function CompetePage() {
               </SheetHeader>
 
               <div className="space-y-6 pt-6">
+                {/* vs Iren quick comparison */}
+                {iren && (
+                  <Card className="border-[#22c55e]/20 bg-[#22c55e]/4">
+                    <CardContent className="p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-[#22c55e] mb-2">vs Iren</p>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">MW</p>
+                          <p className="text-xs font-medium">{selected.capacity_mw?.toLocaleString() ?? "—"}</p>
+                          <p className="text-[10px] text-[#22c55e]">{iren.capacity_mw?.toLocaleString() ?? "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">GPUs</p>
+                          <p className="text-xs font-medium">{selected.gpu_count?.toLocaleString() ?? "—"}</p>
+                          <p className="text-[10px] text-[#22c55e]">{iren.gpu_count?.toLocaleString() ?? "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Activity</p>
+                          <p className="text-xs font-medium">{selected.signal_count_30d}</p>
+                          <p className="text-[10px] text-[#22c55e]">—</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {selected.description && (
                   <p className="text-sm text-muted-foreground">{selected.description}</p>
                 )}
@@ -655,106 +613,42 @@ function StatCard({ label, value, mono }: { label: string; value: string; mono?:
   )
 }
 
-function ComparisonCard({
-  title,
-  isIren,
-  competitor,
-  iren,
-}: {
-  title: string
-  isIren: boolean
-  competitor: Competitor | null
-  iren: LandscapeData["iren"] | null
-}) {
-  if (isIren && iren) {
-    return (
-      <Card className="border-[#22c55e]/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg text-[#22c55e]">{iren.name}</CardTitle>
-          <p className="text-xs text-muted-foreground">{iren.industry}</p>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Row label="Capacity" value={iren.capacity_mw ? `${iren.capacity_mw.toLocaleString()} MW` : "—"} />
-          <Row label="GPUs" value={iren.gpu_count ? iren.gpu_count.toLocaleString() : "—"} />
-          <Row label="Pricing" value={iren.known_pricing || "—"} />
-          <Row label="Customers" value={iren.key_customers?.join(", ") || "—"} />
-          <Separator />
-          {iren.strengths && iren.strengths.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold uppercase text-green-400 mb-1">Strengths</p>
-              <ul className="space-y-0.5">
-                {iren.strengths.map((s, i) => <li key={i} className="text-[11px] text-muted-foreground">+ {s}</li>)}
-              </ul>
-            </div>
-          )}
-          {iren.weaknesses && iren.weaknesses.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold uppercase text-red-400 mb-1">Weaknesses</p>
-              <ul className="space-y-0.5">
-                {iren.weaknesses.map((w, i) => <li key={i} className="text-[11px] text-muted-foreground">- {w}</li>)}
-              </ul>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (!competitor) {
-    return (
-      <Card className="border-border/50">
-        <CardContent className="py-16 text-center text-muted-foreground text-sm">
-          {title}
-        </CardContent>
-      </Card>
-    )
-  }
-
+function DealThreatCard({ threat }: { threat: DealThreat }) {
   return (
-    <Card className="border-border/50">
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <CardTitle className="text-lg">{competitor.name}</CardTitle>
-          <ThreatBadge level={competitor.threat_level} />
-        </div>
-        <div className="flex items-center gap-2">
-          <SegmentBadge segment={competitor.segment} />
-          <span className="text-xs text-muted-foreground">{competitor.hq_location}</span>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <Row label="Capacity" value={competitor.capacity_mw ? `${competitor.capacity_mw.toLocaleString()} MW` : "—"} />
-        <Row label="GPUs" value={competitor.gpu_count ? competitor.gpu_count.toLocaleString() : "—"} />
-        <Row label="Pricing" value={competitor.known_pricing || "—"} />
-        <Row label="Customers" value={competitor.key_customers.length > 0 ? competitor.key_customers.join(", ") : "—"} />
-        <Separator />
-        {competitor.strengths.length > 0 && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase text-green-400 mb-1">Strengths</p>
-            <ul className="space-y-0.5">
-              {competitor.strengths.map((s, i) => <li key={i} className="text-[11px] text-muted-foreground">+ {s}</li>)}
-            </ul>
+    <Card className="border-red-400/20">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Target className="h-4 w-4 text-red-400" />
+            <span className="font-medium">{threat.prospect_name}</span>
+            <Badge variant="outline" className="text-[10px]">{threat.tier}</Badge>
           </div>
-        )}
-        {competitor.weaknesses.length > 0 && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase text-red-400 mb-1">Weaknesses</p>
-            <ul className="space-y-0.5">
-              {competitor.weaknesses.map((w, i) => <li key={i} className="text-[11px] text-muted-foreground">- {w}</li>)}
-            </ul>
+          <span className="text-sm font-semibold tabular-nums">{threat.score}</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {threat.competing_segments.map((seg) => (
+            <SegmentBadge key={seg} segment={seg} />
+          ))}
+        </div>
+        {threat.recent_competitor_moves.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Recent competitor moves</p>
+            {threat.recent_competitor_moves.map((move, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <Badge variant="outline" className={cn("text-[10px] capitalize border shrink-0", EVENT_TYPE_COLORS[move.event_type] ?? "")}>
+                  {move.event_type}
+                </Badge>
+                <div className="min-w-0">
+                  <span className="text-xs font-medium">{move.company_name}</span>
+                  <p className="text-[11px] text-muted-foreground truncate">{move.title}</p>
+                  <p className="text-[10px] text-muted-foreground/60">{formatDate(move.detected_at)}</p>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </CardContent>
     </Card>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <span className="text-[11px] text-muted-foreground shrink-0">{label}</span>
-      <span className="text-[11px] text-right">{value}</span>
-    </div>
   )
 }
 

@@ -25,58 +25,60 @@ import { SignalBadge } from "@/components/signal-badge"
 import { ProductBadge } from "@/components/product-badge"
 import { DeltaValue } from "@/components/delta-value"
 import { getProspects, getProspect, generateBrief, generateEmail, getCompetitiveContext } from "@/lib/api"
-import { cn, formatDate, computeDeadline, ROLE_TYPE_COLORS, ROLE_TYPE_LABELS, URGENCY_COLORS } from "@/lib/utils"
+import { cn, formatDate, computeDeadline, ROLE_TYPE_COLORS, ROLE_TYPE_LABELS, URGENCY_BADGE_COLORS } from "@/lib/utils"
 import type { CompetitiveContext, Prospect, Tier } from "@/lib/types"
 import { SourceBadge } from "@/components/source-badge"
 import { ArrowUpDown, ArrowUp, ArrowDown, Search, Sparkles, Mail, ExternalLink, Loader2, Users, Zap, Clock } from "lucide-react"
+import ReactMarkdown from "react-markdown"
 
 const TIER_ORDER: Record<Tier, number> = { "VERY HIGH": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "DORMANT": 4 }
 
 // --- Brief formatting ---
 
-const BRIEF_SECTIONS = ["THESIS", "URGENCY", "LEAD WITH", "DECISION MAKERS", "COMPETITIVE CONTEXT"]
-
 function FormattedBrief({ text }: { text: string }) {
-  const sectionRegex = new RegExp(
-    `(?:^|\\n)\\s*(?:\\d+\\.\\s*)?(?:##?\\s*)?(${BRIEF_SECTIONS.join("|")})\\s*[-:—]\\s*`,
-    "gi"
-  )
-
-  const parts: { header: string | null; content: string }[] = []
-  let lastIndex = 0
-  let lastHeader: string | null = null
-  let match: RegExpExecArray | null
-
-  while ((match = sectionRegex.exec(text)) !== null) {
-    const before = text.slice(lastIndex, match.index).trim()
-    if (before || lastHeader) {
-      parts.push({ header: lastHeader, content: before })
-    }
-    lastHeader = match[1].toUpperCase()
-    lastIndex = match.index + match[0].length
-  }
-
-  const remaining = text.slice(lastIndex).trim()
-  if (remaining || lastHeader) {
-    parts.push({ header: lastHeader, content: remaining })
-  }
-
-  if (parts.length === 0) {
-    return <p className="text-sm whitespace-pre-wrap">{text}</p>
-  }
-
   return (
-    <div className="space-y-3">
-      {parts.map((part, i) => (
-        <div key={i}>
-          {part.header && (
-            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">
-              {part.header}
-            </p>
-          )}
-          <p className="text-sm leading-relaxed">{part.content}</p>
-        </div>
-      ))}
+    <div className="text-foreground/90">
+      <ReactMarkdown
+        components={{
+          p: ({ children }) => (
+            <p className="text-sm leading-relaxed mb-2 last:mb-0">{children}</p>
+          ),
+          strong: ({ children }) => {
+            const str = String(children)
+            const isSectionHeader = /^(THESIS|URGENCY|LEAD WITH|DECISION MAKERS|COMPETITIVE CONTEXT)$/i.test(str.trim())
+            return isSectionHeader ? (
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-foreground/70 mt-3 mb-0.5 first:mt-0">
+                {str}
+              </span>
+            ) : (
+              <strong className="font-semibold text-foreground">{children}</strong>
+            )
+          },
+          ul: ({ children }) => (
+            <ul className="space-y-1 my-1.5">{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="space-y-1 my-1.5 list-decimal list-inside">{children}</ol>
+          ),
+          li: ({ children }) => (
+            <li className="text-sm leading-relaxed flex gap-1.5">
+              <span className="text-foreground/50 shrink-0 mt-0.5">–</span>
+              <span>{children}</span>
+            </li>
+          ),
+          h1: ({ children }) => (
+            <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/70 mt-3 mb-0.5 first:mt-0">{children}</p>
+          ),
+          h2: ({ children }) => (
+            <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/70 mt-3 mb-0.5 first:mt-0">{children}</p>
+          ),
+          h3: ({ children }) => (
+            <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/70 mt-3 mb-0.5 first:mt-0">{children}</p>
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
     </div>
   )
 }
@@ -88,8 +90,8 @@ const columns: ColumnDef<Prospect>[] = [
     accessorKey: "name",
     header: "Company",
     cell: ({ row }) => (
-      <div className="flex items-center gap-2">
-        <span className="font-medium">{row.original.name}</span>
+      <div className="flex items-center gap-2 min-w-[160px]">
+        <span className="font-medium whitespace-nowrap">{row.original.name}</span>
         <ProductBadge productFit={row.original.product_fit} />
       </div>
     ),
@@ -104,6 +106,7 @@ const columns: ColumnDef<Prospect>[] = [
     id: "score",
     accessorFn: (row) => row.score?.total ?? 0,
     header: "Score",
+    meta: { align: "right" as const },
     cell: ({ row }) => {
       const score = row.original.score
       if (!score) return <span className="text-zinc-600">—</span>
@@ -114,6 +117,7 @@ const columns: ColumnDef<Prospect>[] = [
   {
     accessorKey: "delta",
     header: "Delta",
+    meta: { align: "right" as const },
     cell: ({ row }) => <DeltaValue delta={row.original.delta} />,
     enableSorting: true,
   },
@@ -131,6 +135,7 @@ const columns: ColumnDef<Prospect>[] = [
   {
     accessorKey: "signals_7d",
     header: "Signals",
+    meta: { align: "right" as const },
     cell: ({ row }) => (
       <span className="font-mono tabular-nums text-muted-foreground">{row.original.signals_7d}</span>
     ),
@@ -302,29 +307,33 @@ function ProspectsPageInner() {
               <thead>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id} className="border-b border-border/50">
-                    {headerGroup.headers.map((header) => (
-                      <th
-                        key={header.id}
-                        className={cn(
-                          "px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground",
-                          header.column.getCanSort() && "cursor-pointer select-none transition-colors hover:bg-muted/30 hover:text-foreground rounded"
-                        )}
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        <div className="flex items-center gap-1">
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          {header.column.getCanSort() && (
-                            header.column.getIsSorted() === "asc" ? (
-                              <ArrowUp className="h-3 w-3" />
-                            ) : header.column.getIsSorted() === "desc" ? (
-                              <ArrowDown className="h-3 w-3" />
-                            ) : (
-                              <ArrowUpDown className="h-3 w-3 opacity-30" />
-                            )
+                    {headerGroup.headers.map((header) => {
+                      const isRight = (header.column.columnDef.meta as { align?: string } | undefined)?.align === "right"
+                      return (
+                        <th
+                          key={header.id}
+                          className={cn(
+                            "px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground",
+                            isRight ? "text-right" : "text-left",
+                            header.column.getCanSort() && "cursor-pointer select-none transition-colors hover:bg-muted/30 hover:text-foreground rounded"
                           )}
-                        </div>
-                      </th>
-                    ))}
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          <div className={cn("flex items-center gap-1", isRight && "justify-end")}>
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            {header.column.getCanSort() && (
+                              header.column.getIsSorted() === "asc" ? (
+                                <ArrowUp className="h-3 w-3" />
+                              ) : header.column.getIsSorted() === "desc" ? (
+                                <ArrowDown className="h-3 w-3" />
+                              ) : (
+                                <ArrowUpDown className="h-3 w-3 opacity-30" />
+                              )
+                            )}
+                          </div>
+                        </th>
+                      )
+                    })}
                   </tr>
                 ))}
               </thead>
@@ -335,11 +344,14 @@ function ProspectsPageInner() {
                     className="border-b border-border/30 cursor-pointer transition-colors hover:bg-muted/20"
                     onClick={() => openDetail(row.original.id)}
                   >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-3 py-2">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
+                    {row.getVisibleCells().map((cell) => {
+                      const isRight = (cell.column.columnDef.meta as { align?: string } | undefined)?.align === "right"
+                      return (
+                        <td key={cell.id} className={cn("px-3 py-2", isRight && "text-right")}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      )
+                    })}
                   </tr>
                 ))}
                 {table.getRowModel().rows.length === 0 && (
@@ -358,6 +370,9 @@ function ProspectsPageInner() {
       {/* Detail Sheet */}
       <Sheet open={selectedId !== null} onOpenChange={(open) => { if (!open) setSelectedId(null) }}>
         <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+          {!detail && (
+            <SheetTitle className="sr-only">Prospect details</SheetTitle>
+          )}
           {detailLoading ? (
             <div className="space-y-4 pt-6">
               <Skeleton className="h-6 w-48" />
@@ -421,15 +436,15 @@ function ProspectsPageInner() {
 
                   {/* 3. Brief/Email output inline */}
                   {brief && (
-                    <div className="mt-3 rounded-md border border-border/30 bg-muted/30 p-3">
-                      <p className="text-xs font-semibold text-muted-foreground mb-2">Sales Brief</p>
+                    <div className="mt-3 rounded-md border border-border/50 bg-muted/20 p-4">
+                      <p className="text-xs font-semibold text-foreground/80 mb-2">Sales Brief</p>
                       <FormattedBrief text={brief} />
                     </div>
                   )}
                   {email && (
-                    <div className="mt-3 rounded-md border border-border/30 bg-muted/30 p-3">
-                      <p className="text-xs font-semibold text-muted-foreground mb-1">Outreach Email</p>
-                      <pre className="text-sm whitespace-pre-wrap font-sans">{email}</pre>
+                    <div className="mt-3 rounded-md border border-border/50 bg-muted/20 p-4">
+                      <p className="text-xs font-semibold text-foreground/80 mb-1">Outreach Email</p>
+                      <pre className="text-sm whitespace-pre-wrap font-sans text-foreground/90">{email}</pre>
                     </div>
                   )}
                 </div>
@@ -443,21 +458,21 @@ function ProspectsPageInner() {
                       <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
                         <Clock className="h-3 w-3" /> Engagement Windows
                       </h3>
-                      <div className="space-y-1.5">
+                      <div className="space-y-3">
                         {detail.engagement_windows.map((ew, i) => (
-                          <div key={i} className="flex items-start gap-2.5 rounded-md border border-border/30 px-3 py-2">
-                            <SignalBadge type={ew.signal_type} />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className={cn(
-                                  "text-[10px] font-bold",
-                                  URGENCY_COLORS[ew.urgency] ?? "text-zinc-400"
-                                )}>
+                          <div key={i} className="rounded-md border border-border/50 px-3 py-2.5">
+                            <div className="grid grid-cols-[minmax(7rem,auto)_1fr_auto] gap-x-3 gap-y-1.5 items-baseline">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <SignalBadge type={ew.signal_type} />
+                                <Badge
+                                  variant="outline"
+                                  className={cn("text-[10px] font-semibold border shrink-0", URGENCY_BADGE_COLORS[ew.urgency] ?? "text-zinc-400 bg-zinc-400/10 border-zinc-400/20")}
+                                >
                                   {ew.urgency}
-                                </span>
-                                <span className="text-xs font-medium">{ew.window}</span>
+                                </Badge>
                               </div>
-                              <p className="text-[11px] text-muted-foreground/70 mt-0.5">{ew.insight}</p>
+                              <span className="col-start-3 text-xs font-medium tabular-nums text-foreground/80 shrink-0">{ew.window}</span>
+                              <p className="col-span-3 text-[13px] leading-relaxed text-foreground/85 mt-0.5">{ew.insight}</p>
                             </div>
                           </div>
                         ))}
@@ -473,33 +488,33 @@ function ProspectsPageInner() {
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
                       <Zap className="h-3 w-3" /> Recent Signals
                     </h3>
-                    <div className="space-y-1.5 max-h-80 overflow-y-auto">
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
                       {detail.signals.map((s) => {
                         const deadline = computeDeadline(s.detected_at ?? "", s.action_window)
                         const [soWhat, doThis] = (s.action_insight ?? "").split(" → ")
                         return (
-                          <div key={s.id} className="rounded-md border border-border/30 px-3 py-2">
-                            <div className="flex items-center justify-between gap-2">
+                          <div key={s.id} className="rounded-md border border-border/30 px-3 py-2.5">
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
                               <div className="flex items-center gap-1.5 shrink-0">
                                 <SignalBadge type={s.signal_type} />
                                 {s.urgency && s.urgency !== "LOW" && (
-                                  <span className={cn(
-                                    "text-[10px] font-bold",
-                                    URGENCY_COLORS[s.urgency] ?? "text-zinc-400"
-                                  )}>
+                                  <Badge
+                                    variant="outline"
+                                    className={cn("text-[10px] font-semibold border", URGENCY_BADGE_COLORS[s.urgency] ?? "text-zinc-400 bg-zinc-400/10 border-zinc-400/20")}
+                                  >
                                     {s.urgency}
-                                  </span>
+                                  </Badge>
                                 )}
                                 <SourceBadge sourceType={s.source_type} />
                               </div>
                               <span className="text-[11px] text-muted-foreground/60 shrink-0">{formatDate(s.detected_at)}</span>
                             </div>
-                            <p className="text-xs leading-relaxed mt-1.5">{s.title}</p>
+                            <p className="text-xs leading-relaxed">{s.title}</p>
                             {soWhat && (
                               <>
-                                <div className="border-t border-border/20 my-1.5" />
-                                <p className="text-xs font-medium text-muted-foreground">
-                                  <span className="text-muted-foreground/50">So what: </span>{soWhat}
+                                <div className="border-t border-border/20 my-2" />
+                                <p className="text-xs text-muted-foreground">
+                                  <span className="font-medium text-muted-foreground/50">So what: </span>{soWhat}
                                 </p>
                                 {doThis && (
                                   <p className="text-xs mt-0.5 text-[#22c55e]">
@@ -508,23 +523,25 @@ function ProspectsPageInner() {
                                 )}
                               </>
                             )}
-                            <div className="flex items-center justify-end gap-2 mt-1.5">
-                              {deadline && (
-                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-400/10 text-amber-400/80">
-                                  Act by {deadline}
-                                </span>
-                              )}
-                              {s.source_url && (
-                                <a
-                                  href={s.source_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-muted-foreground/40 hover:text-[#22c55e] transition-colors"
-                                >
-                                  <ExternalLink className="h-3 w-3" />
-                                </a>
-                              )}
-                            </div>
+                            {(deadline || s.source_url) && (
+                              <div className="flex items-center justify-end gap-2 mt-2">
+                                {deadline && (
+                                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md border border-amber-400/20 bg-amber-400/8 text-amber-400/80">
+                                    Act by {deadline}
+                                  </span>
+                                )}
+                                {s.source_url && (
+                                  <a
+                                    href={s.source_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-muted-foreground/40 hover:text-[#22c55e] transition-colors"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )
                       })}

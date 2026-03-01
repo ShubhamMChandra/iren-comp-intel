@@ -91,7 +91,7 @@ class FundingCollector(BaseCollector):
                     title_lower = title.lower()
                     signal_type = self._classify_funding(title_lower)
 
-                    if signal_type:
+                    if signal_type and self._company_is_recipient(company.name, title):
                         amount = self._extract_amount(title)
                         self._create_signal(
                             company_id=company.id,
@@ -101,11 +101,87 @@ class FundingCollector(BaseCollector):
                             source_url=link,
                             source_type="major_news",
                             magnitude=amount or 1.0,
-                            is_active=(signal_type == "fundraising"),
+                            is_active=True,
                             detected_at=pub_date,
                         )
             except Exception as e:
                 print(f"[funding] Error for {company.name}: {e}")
+
+    # Generic suffixes that aren't distinctive enough to match on their own
+    _GENERIC_TOKENS = frozenset({
+        "ai", "labs", "lab", "inc", "co", "corp", "group", "technologies",
+        "technology", "systems", "platform", "platforms", "cloud", "data",
+    })
+
+    def _name_tokens(self, company_name: str) -> list[str]:
+        """
+        Return name variants to search for in a headline:
+        always the full name, plus the first token when it's distinctive (>=4 chars
+        and not a generic suffix). E.g. 'Mistral AI' → ['mistral ai', 'mistral'].
+        """
+        name_lower = company_name.lower()
+        tokens = [name_lower]
+        first = name_lower.split()[0]
+        if len(first) >= 4 and first not in self._GENERIC_TOKENS:
+            tokens.append(first)
+        return tokens
+
+    def _company_is_recipient(self, company_name: str, title: str) -> bool:
+        """
+        Return True only when the prospect is the entity receiving funding,
+        not merely an investor, bystander, or comparison reference.
+
+        Two checks:
+        1. Investor-role patterns: "Led by X", "Backed by X", "X Ventures", etc.
+        2. Subject-position check: when funding keywords are present, the company
+           must appear in the first half of the title (the grammatical subject) or
+           in possessive form — not just as a trailing mention.
+        """
+        name_lower = company_name.lower()
+        title_lower = title.lower()
+        name_variants = self._name_tokens(company_name)
+
+        # At least one name variant must appear in the title
+        if not any(v in title_lower for v in name_variants):
+            return False
+
+        # Explicit investor-role patterns (check all name variants)
+        investor_templates = [
+            "led by {n}",
+            "backed by {n}",
+            "from {n}",
+            "{n} ventures",
+            "{n} capital",
+            "{n} invest",
+            "investment from {n}",
+            "funding from {n}",
+        ]
+        for variant in name_variants:
+            for tmpl in investor_templates:
+                if re.search(tmpl.format(n=re.escape(variant)), title_lower):
+                    return False
+
+        # Subject-position check: when the title contains a funding action keyword,
+        # the company must appear in the first half of the title or as a possessive.
+        # This catches bystander/beneficiary mentions like:
+        #   "OpenAI raises $110B ... should benefit Microsoft, Oracle"
+        #   "AI race: OpenAI raises $110B ... to match Scale AI"
+        funding_action_re = re.compile(
+            r"\b(raises?|raised|secures?|secured|closes?|closed|funding round|series [a-g])\b",
+            re.IGNORECASE,
+        )
+        if funding_action_re.search(title):
+            words = title.split()
+            subject_window = " ".join(words[: max(4, len(words) // 2 + 1)]).lower()
+            in_subject = any(v in subject_window for v in name_variants)
+            in_possessive = any(
+                f"{v}\u2019s" in title_lower or f"{v}'s" in title_lower
+                for v in name_variants
+            )
+            if not in_subject and not in_possessive:
+                return False
+
+        return True
 
     def _classify_funding(self, text: str) -> str | None:
         """Classify text as fundraising, funding_completed, or None."""
