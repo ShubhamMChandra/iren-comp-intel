@@ -37,6 +37,7 @@ import {
   DollarSign,
   ExternalLink,
 } from "lucide-react"
+import ReactMarkdown from "react-markdown"
 
 function DashboardSkeleton() {
   return (
@@ -244,25 +245,40 @@ export default function DashboardPage() {
               <Skeleton className="h-4 w-3/4" />
             </div>
           ) : digest ? (
-            <div className="space-y-4 text-sm leading-relaxed text-muted-foreground">
-              {digest.split(/\n\n+/).map((section, i) => {
-                const lines = section.split('\n')
-                return (
-                  <div key={i} className="space-y-1">
-                    {lines.map((line, j) => {
-                      const bold = line.match(/^\*\*(.+?)\*\*(.*)/)
-                      if (bold) {
-                        return <p key={j}><span className="font-semibold text-foreground">{bold[1]}</span>{bold[2]}</p>
-                      }
-                      if (line.startsWith('- ')) {
-                        return <p key={j} className="pl-3">• {line.slice(2)}</p>
-                      }
-                      if (line.trim() === '') return null
-                      return <p key={j}>{line}</p>
-                    })}
-                  </div>
-                )
-              })}
+            <div className="text-[13px] leading-[1.6] text-foreground/85 space-y-3">
+              <ReactMarkdown
+                components={{
+                  p: ({ children }) => <p>{children}</p>,
+                  strong: ({ children }) => (
+                    <strong className="font-semibold text-foreground">{children}</strong>
+                  ),
+                  ul: ({ children }) => <ul className="space-y-1 ml-3">{children}</ul>,
+                  ol: ({ children }) => <ol className="space-y-1 ml-3 list-decimal">{children}</ol>,
+                  li: ({ children }) => (
+                    <li className="flex gap-2">
+                      <span className="shrink-0 text-foreground/40 select-none">·</span>
+                      <span>{children}</span>
+                    </li>
+                  ),
+                  h1: ({ children }) => (
+                    <div className="pt-2 first:pt-0">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-foreground/50 mb-1">{children}</p>
+                      <div className="border-t border-border/40" />
+                    </div>
+                  ),
+                  h2: ({ children }) => (
+                    <div className="pt-2 first:pt-0">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-foreground/50 mb-1">{children}</p>
+                      <div className="border-t border-border/40" />
+                    </div>
+                  ),
+                  h3: ({ children }) => (
+                    <p className="font-semibold text-foreground/70 text-xs uppercase tracking-wide mt-2">{children}</p>
+                  ),
+                }}
+              >
+                {digest}
+              </ReactMarkdown>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground/60">

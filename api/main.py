@@ -1066,6 +1066,16 @@ def _build_digest_context(session, period: str) -> str:
             .all()
         )
 
+    # Signal count per prospect (active, last 7d) for tier view
+    all_recent_signals = (
+        session.query(Signal)
+        .filter(Signal.detected_at >= cutoff_7d, Signal.is_active == True)
+        .all()
+    )
+    signal_counts: dict[int, int] = {}
+    for sig in all_recent_signals:
+        signal_counts[sig.company_id] = signal_counts.get(sig.company_id, 0) + 1
+
     score_map = get_latest_scores(session)
     deltas = get_score_deltas(session)
     all_scores = [s.total_score for s in score_map.values() if s.total_score > 0]
@@ -1103,7 +1113,9 @@ def _build_digest_context(session, period: str) -> str:
             cats = _score_category_leaders(score)
             top_cat = f"{cats[0][0]} ({cats[0][1]:.1f}/{cats[0][2]:.0f})" if cats[0][1] > 0 else ""
             delta_str = f" ({delta:+.1f})" if abs(delta) > 0.1 else ""
-            parts.append(f"{p.name} {score.total_score:.1f}{delta_str} — {pfit} — led by {top_cat}")
+            sig_count = signal_counts.get(p.id, 0)
+            sig_str = f" [{sig_count} sig]" if sig_count else " [no recent signals]"
+            parts.append(f"{p.name} {score.total_score:.1f}{delta_str}{sig_str} — {pfit} — led by {top_cat}")
         lines.append(f"  {t}: " + " | ".join(parts))
 
     # --- SIGNALS with urgency + timing windows ---
@@ -1127,12 +1139,14 @@ def _build_digest_context(session, period: str) -> str:
         meta = f" ({', '.join(meta_parts)})" if meta_parts else ""
 
         urgency = get_urgency(s.signal_type)
-        timing = TIMING_WINDOWS.get(s.signal_type)
-        window_str = f" — {timing['window']} window" if timing else ""
+        window = s.action_window or (TIMING_WINDOWS[s.signal_type]["window"] if s.signal_type in TIMING_WINDOWS else None)
+        window_str = f" — {window} window" if window else ""
         lines.append(f"  [{s.signal_type}] {urgency} {comp.name}{meta}: {s.title[:120]}{window_str}")
 
-        if idx < 5 and s.summary:
-            lines.append(f"    → {s.summary[:100]}")
+        if idx < 10 and s.summary:
+            lines.append(f"    → {s.summary[:120]}")
+        if idx < 10 and s.action_insight:
+            lines.append(f"    ⚑ {s.action_insight[:120]}")
 
     # --- SCORE MOVERS with tier, product fit, category breakdown ---
     up_movers = sorted(
@@ -1211,6 +1225,26 @@ def _build_digest_context(session, period: str) -> str:
             name = comp.name if comp else "Unknown"
             threat = f" [threat: {comp.threat_level}]" if comp and comp.threat_level else ""
             lines.append(f"  {name}{threat}: {e.title[:150]}")
+            if e.description:
+                lines.append(f"    {e.description[:150]}")
+
+    # --- GOING QUIET: high-tier prospects with no recent signals ---
+    going_quiet = [
+        (p, score_map[p.id])
+        for p in prospects
+        if p.id in score_map
+        and score_map[p.id].total_score > 0
+        and signal_counts.get(p.id, 0) == 0
+        and _tier_label(score_map[p.id].total_score, all_scores) in ("VERY HIGH", "HIGH", "MEDIUM")
+    ]
+    going_quiet.sort(key=lambda x: x[1].total_score, reverse=True)
+    if going_quiet:
+        lines.append("")
+        lines.append("GOING QUIET (scored but no signals in 7d — score decaying):")
+        for p, score in going_quiet[:5]:
+            tier = _tier_label(score.total_score, all_scores)
+            pfit = PRODUCT_FIT_LABELS.get(p.product_fit or "", p.product_fit or "")
+            lines.append(f"  {p.name} {score.total_score:.1f} {tier} — {pfit}")
 
     return "\n".join(lines)
 
