@@ -12,10 +12,28 @@ Uses Google search via RSS to find job postings on common ATS platforms
 from datetime import datetime, timezone
 from urllib.parse import quote
 
+import time
+
 import feedparser
+import requests
 
 from collectors.base import BaseCollector
-from database.models import Company
+from database.models import Company, ProspectScore
+
+_REQUEST_TIMEOUT = 8
+_SLEEP_BETWEEN = 0.4
+_COMPANY_LIMIT = 80
+
+
+def _fetch_feed(url: str) -> feedparser.FeedParserDict:
+    try:
+        resp = requests.get(url, timeout=_REQUEST_TIMEOUT, headers={
+            "User-Agent": "IrenIntel/1.0 (research platform)"
+        })
+        resp.raise_for_status()
+        return feedparser.parse(resp.text)
+    except Exception:
+        return feedparser.FeedParserDict()
 
 INFRA_KEYWORDS = [
     "gpu",
@@ -58,10 +76,20 @@ class JobsCollector(BaseCollector):
     collector_name = "jobs"
 
     def collect(self):
-        """Collect job posting signals for prospect companies."""
-        prospects = (
+        """Collect job posting signals for top prospects by score."""
+        # Prioritise scored prospects so we focus budget on likely buyers
+        scored = (
+            self.session.query(Company, ProspectScore.total_score)
+            .join(ProspectScore, ProspectScore.company_id == Company.id)
+            .filter(Company.company_type == "prospect")
+            .order_by(ProspectScore.total_score.desc())
+            .limit(_COMPANY_LIMIT)
+            .all()
+        )
+        prospects = [c for c, _ in scored] if scored else (
             self.session.query(Company)
             .filter(Company.company_type == "prospect")
+            .limit(_COMPANY_LIMIT)
             .all()
         )
 
@@ -69,6 +97,7 @@ class JobsCollector(BaseCollector):
 
         for company in prospects:
             self._search_jobs(company)
+            time.sleep(_SLEEP_BETWEEN)
 
         self.finish()
 
@@ -78,7 +107,7 @@ class JobsCollector(BaseCollector):
 
         try:
             url = GOOGLE_NEWS_JOBS.format(query=quote(query))
-            feed = feedparser.parse(url)
+            feed = _fetch_feed(url)
 
             for entry in feed.entries[:10]:
                 title = entry.get("title", "")
