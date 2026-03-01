@@ -157,7 +157,7 @@ The four Virginia collectors form a local market intelligence layer: VEDP tracks
 | International | Adani Group | Geography, regulatory approval, talent access | Iren competes on US proximity and operational track record |
 | Miner-to-HPC | Hut 8, Core Scientific, Cipher Mining, HIVE Digital, TeraWulf, Bit Digital | Pivot execution speed, HPC customer contracts, power cost | Direct peers with the same Bitcoin-to-AI playbook — Iren differentiates on execution speed, customer quality, and renewable energy |
 
-**Threat assessment:** Includes high-threat competitors across Neocloud (CoreWeave, Crusoe, Nebius), DC REIT (QTS, Vantage), Power-First (Lancium, Applied Digital), and Miner-to-HPC (Hut 8, Core Scientific) segments.
+**Threat assessment:** Each competitor is assigned a threat level (high/medium/low) relative to Iren based on overlap in product fit, customer type, and recent activity. Threat levels are private configuration.
 
 **Prospect-level competitive context:** Every prospect's product fit (AI Cloud, Colocation, Build-to-Suit) maps to relevant competitor segments. When a rep opens a prospect, they see which competitors they're likely bidding against, recent competitive moves from those competitors, and Iren's positioning edge. The mapping:
 
@@ -175,21 +175,21 @@ Each prospect is scored 0–100 across 6 categories. Formula per signal:
 points = base_points × recency_decay × magnitude_multiplier × source_confidence
 ```
 
-- **Recency decay**: exponential half-life per signal type (30–60 days). A hiring signal from last week scores higher than one from three months ago.
-- **Magnitude multiplier**: tiered thresholds for funding amounts. Below $50M = 0.5× baseline. Ramps through $250M (1.0×) to $1B (1.6–1.8× depending on signal type) and caps at $5B+ (2.0×). Fundraising multipliers are slightly more aggressive than funding-completed because an active raise is a timing signal.
-- **Source confidence**: SEC filing (1.0) → major news (0.85) → industry news (0.7) → blog (0.5) → social media (0.35) → rumor (0.2).
+- **Recency decay**: exponential half-life per signal type. A hiring signal from last week scores higher than one from three months ago.
+- **Magnitude multiplier**: tiered thresholds for funding amounts — smaller rounds score below baseline, large rounds score above, with fundraising multipliers slightly more aggressive than completed-funding because an active raise is a timing signal.
+- **Source confidence**: SEC filing → major news → industry news → blog → social media → rumor, each discounted accordingly.
 - **Category cap**: each signal type has a max_points ceiling. All caps sum to 100.
 
-| Signal Type | Max Points | Base Points | Half-Life |
-|-------------|-----------|-------------|-----------|
-| Infrastructure Hiring | 25 | 3 per posting | 45 days |
-| Active Fundraising | 20 | 15 | 30 days |
-| AI Initiatives | 15 | 8 | 45 days |
-| Completed Funding | 15 | 10 | 60 days |
-| Cloud Spend | 15 | 10 | 60 days |
-| Outgrowing Provider | 10 | 8 | 30 days |
+| Signal Type | Buyer Stage | Why It Matters |
+|-------------|-------------|----------------|
+| Infrastructure Hiring | Need Detected | Strongest leading indicator — each infra role posted accumulates pressure |
+| Active Fundraising | Budget Available | Time-sensitive timing signal; fast decay reflects the narrow window |
+| AI Initiatives | Need Detected | Training runs, model launches, GitHub infra scaling |
+| Completed Funding | Budget Available | Capital deployed — infrastructure purchasing follows |
+| Cloud Spend | Need Detected | Repatriation opportunity; slower decay reflects longer decision cycle |
+| Outgrowing Provider | Actively Evaluating | In-market now; highest urgency |
 
-Hiring is weighted highest (25 points) because infrastructure job postings are the strongest leading indicator of capacity buildout. Fundraising decays fastest (30-day half-life) because it's a time-sensitive timing signal — if you're not in the conversation within a month, you've missed the window.
+Exact weights, half-lives, and magnitude thresholds are configurable per deployment.
 
 ## Frontend
 

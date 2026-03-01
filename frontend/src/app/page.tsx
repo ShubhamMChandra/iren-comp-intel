@@ -37,6 +37,8 @@ import {
   DollarSign,
   ExternalLink,
   ChevronDown,
+  Sun,
+  Moon,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 
@@ -111,20 +113,29 @@ function DigestAccordion({ text }: { text: string }) {
           <div key={i}>
             <button
               onClick={() => toggle(i)}
-              className="w-full flex items-center justify-between py-2.5 text-left group"
+              className="w-full flex items-center justify-between py-2.5 text-left group min-h-[44px]"
             >
               <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground/60 group-hover:text-foreground/80 transition-colors">
                 {sec.title}
               </span>
               <ChevronDown
-                className={`h-3.5 w-3.5 text-foreground/30 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                className={cn(
+                  "h-3.5 w-3.5 text-foreground/30 shrink-0 transition-transform duration-200",
+                  isOpen && "rotate-180"
+                )}
               />
             </button>
-            {isOpen && (
-              <div className="pb-3 space-y-2">
-                <ReactMarkdown components={DIGEST_MD_COMPONENTS}>{sec.body}</ReactMarkdown>
+            {/* CSS grid trick: animates height without JS measurement */}
+            <div
+              style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
+              className="grid transition-[grid-template-rows] duration-200 ease-in-out"
+            >
+              <div className="overflow-hidden">
+                <div className="pb-3 space-y-2">
+                  <ReactMarkdown components={DIGEST_MD_COMPONENTS}>{sec.body}</ReactMarkdown>
+                </div>
               </div>
-            )}
+            </div>
           </div>
         )
       })}
@@ -198,6 +209,16 @@ export default function DashboardPage() {
 
     return () => { cancelled = true }
   }, [])
+
+  const switchDigestPeriod = useCallback((period: "morning" | "afternoon") => {
+    if (period === digestPeriod || digestLoading) return
+    setDigestLoading(true)
+    setDigest(null)
+    getDashboardDigest(period)
+      .then((r) => { setDigest(r.digest); setDigestPeriod(r.period) })
+      .catch(() => {})
+      .finally(() => setDigestLoading(false))
+  }, [digestPeriod, digestLoading])
 
   if (loading) return <div className="min-h-screen bg-[#09090b]"><DashboardSkeleton /></div>
 
@@ -323,12 +344,38 @@ export default function DashboardPage() {
       </div>
 
       {/* AI Digest */}
-      <Card className="mb-8 border-[#22c55e]/20 bg-[#22c55e]/[0.03]">
+      <Card className="mb-8 border-[#22c55e]/20 bg-[#22c55e]/3">
         <CardHeader className="pb-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-[#22c55e]" />
-            <CardTitle className="text-sm font-medium">{digestPeriod === "afternoon" ? "Afternoon" : "Morning"} Digest</CardTitle>
-            <Badge variant="outline" className="text-[10px] border-[#22c55e]/30 text-[#22c55e]">AI</Badge>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-[#22c55e]" />
+              <CardTitle className="text-sm font-medium">{digestPeriod === "afternoon" ? "Afternoon" : "Morning"} Digest</CardTitle>
+              <Badge variant="outline" className="text-[10px] border-[#22c55e]/30 text-[#22c55e]">AI</Badge>
+            </div>
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={() => switchDigestPeriod("morning")}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-colors",
+                  digestPeriod === "morning"
+                    ? "bg-[#22c55e]/10 text-[#22c55e]"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Sun className="h-3 w-3" /> AM
+              </button>
+              <button
+                onClick={() => switchDigestPeriod("afternoon")}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-colors",
+                  digestPeriod === "afternoon"
+                    ? "bg-[#22c55e]/10 text-[#22c55e]"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Moon className="h-3 w-3" /> PM
+              </button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

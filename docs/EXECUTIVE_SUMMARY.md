@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Iren Sales Intelligence is a signal-driven GTM platform that detects infrastructure buying signals across 290 prospect companies using 15 collectors on free public data sources. It maps signals to the buyer journey — detecting need before budget, and budget before evaluation — to give Iren's commercial team a timing advantage on $10M+ infrastructure deals. The platform runs on a four-tier AI cost model (free local embeddings, $0.15/run collection, on-demand analysis, premium daily digest via Opus 4.6) with a total budget of $15, replacing the function of a $15K/month data vendor subscription. Every AI feature degrades gracefully to keyword fallbacks — the tool is fully operational with zero LLM spend.
+Iren Sales Intelligence is a signal-driven GTM platform that detects infrastructure buying signals across 396 prospect companies using 19 collectors on free public data sources. It maps signals to the buyer journey — detecting need before budget, and budget before evaluation — to give Iren's commercial team a timing advantage on $10M+ infrastructure deals. The platform runs on a four-tier AI cost model (free local embeddings, $0.15/run collection, on-demand analysis, premium daily digest via Opus 4.6) with a total budget of $15, replacing the function of a $15K/month data vendor subscription. Every AI feature degrades gracefully to keyword fallbacks — the tool is fully operational with zero LLM spend.
 
 ---
 
@@ -36,32 +36,32 @@ The scoring engine weights signals by product fit so reps know who to call, why,
 
 6 signal categories. Max 100 points. Exponential recency decay.
 
-| Signal | Max Points | Base Points | Half-Life | Buyer Stage | Urgency |
-|---|---|---|---|---|---|
-| Hiring | 25 | 3 per posting | 45 days | Need Detected | MEDIUM |
-| Fundraising | 20 | 15 | 30 days | Budget Available | HIGH |
-| Cloud Spend | 15 | 10 | 60 days | Need Detected | MEDIUM |
-| Funding Completed | 15 | 10 | 60 days | Budget Available | HIGH |
-| AI Initiative | 15 | 8 | 45 days | Need Detected | MEDIUM |
-| Outgrowing | 10 | 8 | 30 days | Actively Evaluating | URGENT |
+| Signal | Buyer Stage | Urgency | Why It Matters |
+|---|---|---|---|
+| Hiring | Need Detected | MEDIUM | Strongest leading indicator — accumulates per posting, reflects sustained buildout pressure |
+| Fundraising | Budget Available | HIGH | Time-sensitive window; decays fastest because the timing narrows as a round closes |
+| Cloud Spend | Need Detected | MEDIUM | Repatriation opportunity; slower decay reflects longer decision cycle |
+| Funding Completed | Budget Available | HIGH | Capital deployed — infrastructure purchasing follows |
+| AI Initiative | Need Detected | MEDIUM | Training runs, model launches, scaling compute |
+| Outgrowing | Actively Evaluating | URGENT | In-market now; shortest decay, highest urgency |
 
 The scoring is not a signal count. It is a **decay function that surfaces timing**.
 
 **Formula:** `points = base_points × recency_decay × magnitude_multiplier × source_confidence`, capped per category.
 
-**Recency decay** is exponential with per-signal-type half-lives. A fundraising signal retains 97.7% of its score after 1 day, 50% after 30 days, and 12.5% after 90. The half-lives encode how fast a signal loses decision relevance: fundraising and outgrowing decay fastest (30 days) because they represent narrow timing windows. Cloud spend decays slowest (60 days) because repatriation decisions unfold over quarters.
+**Recency decay** is exponential with per-signal-type half-lives that encode how fast a signal loses decision relevance. Fundraising and outgrowing decay fastest because they represent narrow timing windows. Cloud spend decays slowest because repatriation decisions unfold over quarters.
 
-**Magnitude multipliers** scale funding signals nonlinearly based on round size. Below $50M, the multiplier is 0.5× (the signal exists but is not a major capacity indicator). The curve ramps through $250M (1.0×, baseline) to $1B (1.8× for fundraising, 1.6× for completed funding) and caps at $5B (2.0×). Fundraising multipliers are slightly more aggressive than funding-completed because an active raise is a timing signal — the round hasn't closed yet, so there's still time to position.
+**Magnitude multipliers** scale funding signals nonlinearly based on round size — small rounds score below baseline, large rounds above — with fundraising multipliers slightly more aggressive than completed-funding because an active raise is a timing signal.
 
-**Source confidence** discounts unreliable origins: SEC filing = 1.0, major news = 0.85, industry news = 0.7, blog = 0.5, social media = 0.35, rumor = 0.2.
+**Source confidence** discounts unreliable origins in order: SEC filing → major news → industry news → blog → social media → rumor.
 
-**Why hiring is weighted highest (25 points):** Infrastructure job postings are the strongest leading indicator of capacity buildout. Unlike funding signals (which are one-off events), hiring accumulates — each posting contributes 3 base points, so a company posting 8 GPU infra roles generates more signal pressure than a single funding announcement. The 45-day half-life reflects the lag between posting and actual procurement.
+**Why hiring is weighted highest:** Infrastructure job postings are the strongest leading indicator of capacity buildout. Unlike funding signals (one-off events), hiring accumulates — a company posting multiple GPU infra roles generates more sustained signal pressure than a single funding announcement.
 
 **Engagement windows** — the period where outreach has the highest conversion probability:
 
 | Signal | Window | Action Insight |
 |---|---|---|
-| Outgrowing | 1–3 months | Provider dissatisfaction. They are in-market now. Competitive displacement. |
+| Outgrowing | Weeks–months | Provider dissatisfaction. They are in-market now. Competitive displacement. |
 | Funding Completed | 30–120 days | Capital deployed. Infrastructure purchasing follows within one quarter. |
 | Fundraising | 60–90 days | Active raise. Position Iren before the round closes. |
 | Hiring | 3–6 months | Capacity buildout coming. Start technical conversations now. |
@@ -78,12 +78,12 @@ The scoring is not a signal count. It is a **decay function that surfaces timing
 
 | Segment | Competitors | Iren Positioning |
 |---------|------------|------------------|
-| Neocloud (7) | CoreWeave, Crusoe, Lambda, Nebius, Voltage Park, etc. | Iren supplies the infrastructure neoclouds run on — they are both customers and competitors |
-| Hyperscaler (2) | AWS, Google Cloud | Iren builds overflow capacity when demand exceeds their DC pipeline |
-| DC REIT (2) | Equinix, Digital Realty | Iren differentiates on AI-ready high-density design and renewable energy cost advantage |
-| Power-First (2) | Lancium, Applied Digital | Direct competitors — same energy-first playbook |
-| International (1) | Adani Group | Iren competes on US proximity and operational track record |
-| Miner-to-HPC (6) | Hut 8, Core Scientific, Cipher Mining, HIVE Digital, TeraWulf, Bit Digital | Direct peers — same Bitcoin-to-AI pivot. Iren differentiates on execution speed, customer quality, renewable energy |
+| Neocloud | CoreWeave, Crusoe, Lambda, Nebius, Voltage Park, etc. | Iren supplies the infrastructure neoclouds run on — they are both customers and competitors |
+| Hyperscaler | AWS, Google Cloud | Iren builds overflow capacity when demand exceeds their DC pipeline |
+| DC REIT | Equinix, Digital Realty, QTS, CyrusOne, Vantage | Iren differentiates on AI-ready high-density design and renewable energy cost advantage |
+| Power-First | Lancium, Applied Digital | Direct competitors — same energy-first playbook |
+| International | Adani Group | Iren competes on US proximity and operational track record |
+| Miner-to-HPC | Hut 8, Core Scientific, Cipher Mining, HIVE Digital, TeraWulf, Bit Digital | Direct peers — same Bitcoin-to-AI pivot. Iren differentiates on execution speed, customer quality, renewable energy |
 
 **Prospect-level competitive context.** Every prospect's product fit maps to relevant competitor segments via `PRODUCT_FIT_TO_SEGMENTS`. When a rep opens a prospect, they see which competitors they're likely bidding against, recent competitive moves from those competitors, and Iren's positioning edge:
 
@@ -110,19 +110,19 @@ When Ollama is not available, the system falls back to exact-title-only dedup. N
 
 Three types of AI-generated output, all grounded in the actual signals collected. No hallucinated context — every prompt is assembled from real database rows.
 
-**Pre-call briefs.** The LLM receives structured context: company profile, funding stage (derived from total funding: <$10M = pre-seed/seed, <$50M = Series A, <$200M = Series B, <$500M = growth, ≥$500M = late-stage), product fit label, current score breakdown by category, the 15 most recent signals, up to 8 likely competitors (mapped from product fit to segment), competitor pricing intel, and the 5 most recent competitor moves. The prompt enforces: match the product pitch to product_fit, reference specific signals and scores, don't pitch Build-to-Suit to a Series B startup. Output structure: thesis, urgency, lead-with, decision makers, competitive context. Cached for 7 days.
+**Pre-call briefs.** The LLM receives structured context: company profile, inferred funding stage, product fit label, current score breakdown by category, recent signals, likely competitors (mapped from product fit to segment), competitor pricing intel, and recent competitor moves. Output structure: thesis, urgency, lead-with, decision makers, competitive context. Cached for 7 days.
 
-**Outreach emails.** Same context assembly, different prompt personality ("casual authority — like someone who understands their problem"). References a specific recent signal in the opening hook. Three paragraphs, under 120 words.
+**Outreach emails.** Same context assembly, optimized for a different output format — short, direct, signal-grounded. Under 120 words. References a specific recent signal in the opening hook.
 
-**Battle cards.** Includes competitor data: capacity, GPU count, pricing, key customers, strengths, weaknesses, segment profile with Iren's positioning and key battleground, plus Iren's own self-assessment (strengths and weaknesses). The prompt requires honesty: "AEs lose trust in tools that only say good things." Includes word-for-word objection handling. 500–700 words.
+**Battle cards.** Competitor-specific output that includes capacity, pricing, key customers, strengths/weaknesses, Iren's positioning angle, and objection handling for that segment. 500–700 words.
 
-**Daily digest.** Premium tier (Opus 4.6 with adaptive thinking). The prompt is written as the CRO preparing a VP of Sales for standup. Rules: "cover the full funnel," "name names — never say 'several companies,'" "connect signals to Iren products," "give the VP something to DO — not 'monitor closely.'" Morning and afternoon editions with different lookback windows (18 hours overnight, 8 hours afternoon). Cached for 12 hours.
+**Daily digest.** Premium tier (Opus 4.6 with adaptive thinking). Morning and afternoon editions with different lookback windows. Focused on actionable intelligence — not a summary, but a briefing. Cached for 12 hours.
 
 ---
 
 ## Data Architecture
 
-15 collectors. All free public sources. Zero paid subscriptions.
+19 collectors. All free public sources. Zero paid subscriptions.
 
 ### Need Detected
 
@@ -158,6 +158,15 @@ Three types of AI-generated output, all grounded in the actual signals collected
 | Collector | Source | What It Creates |
 |---|---|---|
 | Competitive Intel | DuckDuckGo web search | `CompetitorEvent` rows: deal, expansion, pricing, talent |
+
+### Virginia Market Intelligence
+
+| Collector | Source | Signal Type | What It Finds |
+|---|---|---|---|
+| VEDP | VEDP press releases + sitemap | `cloud_spend`, `ai_initiative` | State-announced data center investments, site selection deals |
+| Loudoun DC | Loudoun County ArcGIS BuildOut API | `cloud_spend` | New data center permits, construction status changes |
+| PWC DC | Prince William County ArcGIS FeatureServer | `cloud_spend` | Data center buildings and campus projects, MW capacity |
+| COF | VEDP COF/VJIP incentive PDF reports | `funding_completed` | Companies receiving Virginia deal-closing grants and workforce incentives |
 
 ---
 
@@ -228,5 +237,6 @@ A rep's morning with this platform:
 - **CRM integration** (HubSpot/Salesforce) — sync prospect scores and signals bidirectionally, trigger workflows on score changes, auto-create tasks when urgency escalates
 - **Slack/Teams alerts** — push high-urgency signals and call list changes to a channel in real time, with configurable thresholds per rep
 - **Deal stage tracking** — close the loop from signal to meeting to proposal to win; measure which signal combinations predict pipeline progression
-- **Win/loss feedback loop** — use deal outcomes to retrain scoring weights; answer "which signals actually predicted closed deals?" and adjust half-lives and base points accordingly
+- **Win/loss feedback loop** — use deal outcomes to retrain scoring weights; answer "which signals actually predicted closed deals?" and adjust configuration accordingly
+- **Virginia intelligence expansion** — the VEDP/Loudoun/PWC/COF layer covers Iren's home market; extend the same pattern to other priority geographies (Texas, Arizona, Georgia) using state economic development APIs and county permit data
 - **Multi-tenant deployment** — support multiple sales teams with isolated prospect lists, custom scoring configs, and role-based access; move from SQLite to Postgres for concurrent access
