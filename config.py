@@ -118,36 +118,57 @@ except ImportError:
     IREN_BENCHMARK = {
         "name": "Iren",
         "industry": "AI Data Center / Energy",
-        "capacity_mw": 1100,
-        "gpu_count": None,
+        "capacity_mw": 4500,
+        "gpu_count": 10900,
         "is_public": True,
         "ticker": "IREN",
-        "exchange": "ASX",
+        "exchange": "NASDAQ",
         "hq_location": "Sydney, Australia",
         "website": "https://iren.com",
-        "key_customers": ["Microsoft"],
-        "known_pricing": "Build-to-suit and colocation; pricing not publicly listed. Competitive on TCO via renewable energy.",
+        "key_customers": ["Microsoft", "Together AI", "FluidStack", "Fireworks AI"],
+        "known_pricing": (
+            "AI Cloud pricing via direct engagement. "
+            "BTS power ~$0.028/kWh at Childress (spot), ~$0.05/kWh all-in West Texas. "
+            "$9.7B Microsoft contract at ~$1.94B annualized revenue with 20% prepayment."
+        ),
         "products": {
-            "ai_cloud": "GPU-as-a-service for AI training and inference",
-            "colocation": "High-density colocation with air and liquid cooling",
-            "build_to_suit": "Dedicated campus builds for hyperscaler-scale customers",
+            "ai_cloud": "GPU-as-a-service for AI training and inference (3.2 TB/s InfiniBand, NVIDIA H100 through GB300)",
+            "colocation": "High-density colocation with air, liquid, and direct-to-chip cooling (up to 200 kW/rack)",
+            "build_to_suit": "Dedicated campus builds on 2,000+ owned acres with 2.75 GW locked grid power in West Texas",
         },
         "gpu_models": ["H100", "H200", "B200", "B300", "GB300 NVL72"],
-        "locations": ["Texas", "Oklahoma", "British Columbia"],
-        "cooling": ["air", "liquid"],
+        "locations": [
+            "Childress, TX (750 MW)",
+            "Sweetwater, TX (2,000 MW — two sites)",
+            "Oklahoma (1,600 MW)",
+            "Prince George, BC (160 MW)",
+            "Mackenzie, BC",
+            "Canal Flats, BC (30 MW)",
+        ],
+        "cooling": ["air", "liquid (including direct-to-chip for Blackwell, up to 200 kW/rack)"],
         "strengths": [
-            "Vertically integrated: own power generation (renewable)",
-            "Low-cost energy advantage in BC, Canada and Texas",
-            "NVIDIA partnership for next-gen GPU clusters",
-            "Rapid campus buildout capability",
-            "Public company with access to capital markets",
+            "4.5 GW secured grid-connected power across North America",
+            "$9.7B Microsoft contract — $1.94B annualized revenue, ~85% project margins",
+            "NVIDIA Preferred Partner with 10.9K+ GPUs deployed, scaling to 140K by end 2026",
+            "100% renewable energy across all facilities",
+            "Vertically integrated: own land, grid connections, substations, data centers, and GPUs",
+            "Low-cost power: $0.028/kWh at Childress (spot), ~$0.05/kWh all-in West Texas BTS",
+            "Public company (NASDAQ: IREN) with $2.8B cash and $9.2B+ total funding secured in FY26",
         ],
         "weaknesses": [
-            "Smaller scale vs. Equinix/Digital Realty",
-            "Limited brand awareness outside data center industry",
-            "Concentrated geographic footprint",
+            "Revenue still transitioning from Bitcoin mining (Q2 FY26 revenue down 23% on BTC decline)",
+            "Execution risk: 140K GPU ramp across multiple simultaneous construction projects",
+            "High stock volatility (beta >2.5, 52-week range ~$5–$77)",
+            "Smaller operational footprint vs. Equinix/Digital Realty (810 MW operational of 4.5 GW secured)",
+            "Near-term customer concentration as Microsoft contract dominates revenue",
         ],
-        "expansion_plans": "2+ GW pipeline across North America. Childress, TX campus under construction.",
+        "expansion_plans": (
+            "Sweetwater 1 (1.4 GW) energizing April 2026. "
+            "Sweetwater 2 (600 MW) energizing late 2027. "
+            "Oklahoma (1.6 GW) campus energizing 2028. "
+            "Childress Horizon 1–4 (200 MW IT load) under construction for Microsoft ($9.7B deal). "
+            "Targeting 140K GPUs and $3.4B ARR by end of calendar year 2026."
+        ),
     }
     COMPETITOR_SEGMENTS: dict[str, str] = {
         "GPU Cloud": "Neocloud",

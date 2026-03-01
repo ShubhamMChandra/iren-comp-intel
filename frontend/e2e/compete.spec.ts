@@ -4,8 +4,8 @@ const MOCK_COMPETE_RESPONSE = {
   iren: {
     name: "Iren",
     industry: "AI Data Center / Energy",
-    capacity_mw: 1100,
-    gpu_count: null,
+    capacity_mw: 4500,
+    gpu_count: 10900,
     is_public: true,
     ticker: "IREN",
     hq_location: "Sydney, Australia",

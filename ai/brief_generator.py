@@ -48,7 +48,7 @@ def _build_iren_context() -> str:
     if locations:
         lines.append(f"  Locations: {locations}")
     if cap:
-        lines.append(f"  Capacity: {cap:,} MW operational, {expansion}")
+        lines.append(f"  Capacity: {cap:,} MW secured grid-connected power. {expansion}")
     strengths = b.get("strengths", [])
     if strengths:
         lines.append(f"  Edge: {'; '.join(strengths[:3])}")

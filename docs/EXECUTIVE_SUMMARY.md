@@ -238,5 +238,5 @@ A rep's morning with this platform:
 - **Slack/Teams alerts** — push high-urgency signals and call list changes to a channel in real time, with configurable thresholds per rep
 - **Deal stage tracking** — close the loop from signal to meeting to proposal to win; measure which signal combinations predict pipeline progression
 - **Win/loss feedback loop** — use deal outcomes to retrain scoring weights; answer "which signals actually predicted closed deals?" and adjust configuration accordingly
-- **Virginia intelligence expansion** — the VEDP/Loudoun/PWC/COF layer covers Iren's home market; extend the same pattern to other priority geographies (Texas, Arizona, Georgia) using state economic development APIs and county permit data
+- **Virginia intelligence expansion** — the VEDP/Loudoun/PWC/COF layer covers the densest data center market in the US (Northern Virginia); extend the same pattern to other priority geographies (Texas, Arizona, Georgia) using state economic development APIs and county permit data
 - **Multi-tenant deployment** — support multiple sales teams with isolated prospect lists, custom scoring configs, and role-based access; move from SQLite to Postgres for concurrent access
