@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { getDashboard, getDashboardDigest, getSignals } from "@/lib/api"
@@ -36,8 +36,101 @@ import {
   AlertTriangle,
   DollarSign,
   ExternalLink,
+  ChevronDown,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
+
+const DIGEST_MD_COMPONENTS = {
+  p: ({ children }: { children?: React.ReactNode }) => (
+    <p className="text-[13px] leading-[1.65] text-foreground/80">{children}</p>
+  ),
+  strong: ({ children }: { children?: React.ReactNode }) => (
+    <strong className="font-semibold text-foreground">{children}</strong>
+  ),
+  ul: ({ children }: { children?: React.ReactNode }) => (
+    <ul className="space-y-[3px] mt-1">{children}</ul>
+  ),
+  ol: ({ children }: { children?: React.ReactNode }) => (
+    <ol className="space-y-[3px] mt-1 list-decimal ml-4">{children}</ol>
+  ),
+  li: ({ children }: { children?: React.ReactNode }) => (
+    <li className="text-[13px] leading-[1.65] text-foreground/80 pl-3 -indent-3 ml-3">
+      {children}
+    </li>
+  ),
+  table: ({ children }: { children?: React.ReactNode }) => (
+    <div className="overflow-x-auto mt-2 mb-1">
+      <table className="w-full text-[12px] border-collapse">{children}</table>
+    </div>
+  ),
+  th: ({ children }: { children?: React.ReactNode }) => (
+    <th className="text-left text-[10px] font-semibold uppercase tracking-wider text-foreground/40 pb-1 pr-5 border-b border-border/30 whitespace-nowrap">{children}</th>
+  ),
+  td: ({ children }: { children?: React.ReactNode }) => (
+    <td className="py-1 pr-5 align-top text-foreground/75 text-[12px]">{children}</td>
+  ),
+}
+
+function DigestAccordion({ text }: { text: string }) {
+  const sections = useMemo(() => {
+    const sectionPattern = /^(\*\*[^*\n]+\*\*)[ \t]*$/m
+    const parts = text.split(sectionPattern)
+    if (parts.length < 3) return [{ title: null, body: text.trim() }]
+
+    const result: { title: string | null; body: string }[] = []
+    if (parts[0].trim()) result.push({ title: null, body: parts[0].trim() })
+    for (let i = 1; i < parts.length - 1; i += 2) {
+      const title = parts[i].replace(/\*\*/g, "").trim()
+      const body = parts[i + 1]?.trim() ?? ""
+      result.push({ title, body })
+    }
+    return result
+  }, [text])
+
+  const [openSet, setOpenSet] = useState<Set<number>>(() => new Set([0]))
+  const toggle = useCallback((i: number) => {
+    setOpenSet(prev => {
+      const next = new Set(prev)
+      next.has(i) ? next.delete(i) : next.add(i)
+      return next
+    })
+  }, [])
+
+  return (
+    <div className="divide-y divide-border/30">
+      {sections.map((sec, i) => {
+        if (sec.title === null) {
+          return (
+            <div key={i} className="py-2">
+              <ReactMarkdown components={DIGEST_MD_COMPONENTS}>{sec.body}</ReactMarkdown>
+            </div>
+          )
+        }
+        const isOpen = openSet.has(i)
+        return (
+          <div key={i}>
+            <button
+              onClick={() => toggle(i)}
+              className="w-full flex items-center justify-between py-2.5 text-left group"
+            >
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground/60 group-hover:text-foreground/80 transition-colors">
+                {sec.title}
+              </span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 text-foreground/30 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+            {isOpen && (
+              <div className="pb-3 space-y-2">
+                <ReactMarkdown components={DIGEST_MD_COMPONENTS}>{sec.body}</ReactMarkdown>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 function DashboardSkeleton() {
   return (
@@ -245,52 +338,7 @@ export default function DashboardPage() {
               <Skeleton className="h-4 w-3/4" />
             </div>
           ) : digest ? (
-            <div className="text-[13px] leading-[1.6] text-foreground/85 space-y-3">
-              <ReactMarkdown
-                components={{
-                  p: ({ children }) => <p>{children}</p>,
-                  strong: ({ children }) => (
-                    <strong className="font-semibold text-foreground">{children}</strong>
-                  ),
-                  ul: ({ children }) => <ul className="space-y-1 ml-3">{children}</ul>,
-                  ol: ({ children }) => <ol className="space-y-1 ml-3 list-decimal">{children}</ol>,
-                  li: ({ children }) => (
-                    <li className="flex gap-2">
-                      <span className="shrink-0 text-foreground/40 select-none">·</span>
-                      <span>{children}</span>
-                    </li>
-                  ),
-                  h1: ({ children }) => (
-                    <div className="pt-2 first:pt-0">
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-foreground/50 mb-1">{children}</p>
-                      <div className="border-t border-border/40" />
-                    </div>
-                  ),
-                  h2: ({ children }) => (
-                    <div className="pt-2 first:pt-0">
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-foreground/50 mb-1">{children}</p>
-                      <div className="border-t border-border/40" />
-                    </div>
-                  ),
-                  h3: ({ children }) => (
-                    <p className="font-semibold text-foreground/70 text-xs uppercase tracking-wide mt-2">{children}</p>
-                  ),
-                  table: ({ children }) => (
-                    <div className="overflow-x-auto my-2">
-                      <table className="w-full text-[12px] border-collapse">{children}</table>
-                    </div>
-                  ),
-                  th: ({ children }) => (
-                    <th className="text-left text-[10px] font-semibold uppercase tracking-wider text-foreground/50 pb-1 pr-4 border-b border-border/40">{children}</th>
-                  ),
-                  td: ({ children }) => (
-                    <td className="py-1 pr-4 align-top text-foreground/80">{children}</td>
-                  ),
-                }}
-              >
-                {digest}
-              </ReactMarkdown>
-            </div>
+            <DigestAccordion text={digest} />
           ) : (
             <p className="text-sm text-muted-foreground/60">
               Digest unavailable — configure your AI API key to generate daily intelligence briefs.

@@ -4,6 +4,7 @@ Thin wrapper — all business logic lives in the existing modules.
 """
 
 import logging
+import re
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -11,6 +12,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+# ── Bootstrap private config from env var (Railway) ──────────────
+import base64, gzip as _gzip, json as _json, os as _os
+_b64 = _os.environ.get("PRIVATE_CONFIG_B64")
+if _b64 and not (ROOT / "private" / "__init__.py").exists():
+    try:
+        _priv = ROOT / "private"
+        _priv.mkdir(exist_ok=True)
+        _raw = base64.b64decode(_b64)
+        _payload = _gzip.decompress(_raw) if _raw[:2] == b"\x1f\x8b" else _raw
+        for _fn, _src in _json.loads(_payload).items():
+            (_priv / _fn).write_text(_src)
+        (_priv / "__init__.py").touch(exist_ok=True)
+    except Exception as _exc:
+        import logging as _lg
+        _lg.getLogger("iren.bootstrap").warning("Failed to bootstrap private/: %s — using defaults", _exc)
+del _b64
 
 from config import (
     COLLECT_SCHEDULE_HOUR,
@@ -1008,7 +1026,7 @@ def _competitive_pulse(session) -> dict:
 
 try:
     from private.prompts import build_digest_prompt as _private_digest
-    from private.prompts import MORNING_FRAME, AFTERNOON_FRAME
+    from private.prompts import MORNING_FRAME, AFTERNOON_FRAME, DIGEST_REWRITE_PROMPT
     DIGEST_SYSTEM_MSG = _private_digest(_build_iren_context())
 except ImportError:
     DIGEST_SYSTEM_MSG = (
@@ -1020,6 +1038,11 @@ except ImportError:
     )
     MORNING_FRAME = "Summarize overnight signals and pipeline movement."
     AFTERNOON_FRAME = "Summarize what changed since this morning."
+    DIGEST_REWRITE_PROMPT = (
+        "Rewrite this brief: preserve all names, numbers, and tier labels. "
+        "Remove directives and dramatic framing. Use **bold theme** section openers, "
+        "prose and bullets only. Return only the rewritten brief."
+    )
 
 
 def _detect_digest_period() -> str:
@@ -1249,6 +1272,68 @@ def _build_digest_context(session, period: str) -> str:
     return "\n".join(lines)
 
 
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001FAD6"
+    "\U0001FA70-\U0001FAFF"
+    "\U00002702-\U000027B0"
+    "\U0000FE00-\U0000FE0F"
+    "\U0000200D"
+    "\U000024C2-\U0001F251"
+    "]+",
+    flags=re.UNICODE,
+)
+_TABLE_SEP_RE = re.compile(r"^\|[\s:|-]+\|$")
+_TABLE_ROW_RE = re.compile(r"^\|(.+)\|$")
+_HEADER_RE = re.compile(r"^#{1,3}\s+(?:\d+\.\s*)?(.+)$")
+_ACTION_RE = re.compile(r"^\s*(?:→|->|Action:|➡|▶|Recommend:)", re.IGNORECASE)
+_HR_RE = re.compile(r"^-{3,}$|^={3,}$")
+
+
+def _clean_digest(text: str) -> str:
+    """Deterministic post-processing: strip emoji, tables, headers, action lines, HRs."""
+    text = _EMOJI_RE.sub("", text)
+
+    out_lines: list[str] = []
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i].rstrip()
+
+        if _HR_RE.match(line.strip()):
+            i += 1
+            continue
+
+        if _ACTION_RE.match(line):
+            i += 1
+            continue
+
+        header_m = _HEADER_RE.match(line.strip())
+        if header_m:
+            out_lines.append(f"**{header_m.group(1).strip()}**")
+            i += 1
+            continue
+
+        if _TABLE_SEP_RE.match(line.strip()):
+            i += 1
+            continue
+
+        table_m = _TABLE_ROW_RE.match(line.strip())
+        if table_m:
+            cells = [c.strip() for c in table_m.group(1).split("|") if c.strip()]
+            if i + 1 < len(lines) and _TABLE_SEP_RE.match(lines[i + 1].strip()):
+                i += 2
+                continue
+            out_lines.append("- " + " — ".join(cells))
+            i += 1
+            continue
+
+        out_lines.append(line)
+        i += 1
+
+    return "\n".join(out_lines).strip()
+
+
 @app.get("/api/dashboard/digest")
 def dashboard_digest(period: str | None = Query(None), force: bool = Query(False)):
     session = get_session()
@@ -1279,12 +1364,23 @@ def dashboard_digest(period: str | None = Query(None), force: bool = Query(False
             {"role": "system", "content": DIGEST_SYSTEM_MSG},
             {"role": "user", "content": f"{frame}\n\n{context_block}"},
         ]
-        result = call_with_fallback(client, messages, max_tokens=2400, temperature=0.3)
+        raw = call_premium(client, messages, max_tokens=2400, temperature=0.3)
+        if not raw:
+            return {"digest": None, "period": period}
 
-        if result:
-            brief = ProspectBrief(company_id=None, brief_text=result, brief_type=brief_type)
-            session.add(brief)
-            session.commit()
+        cleaned = _clean_digest(raw)
+
+        rewrite_messages = [
+            {"role": "system", "content": DIGEST_REWRITE_PROMPT},
+            {"role": "user", "content": cleaned},
+        ]
+        result = call_with_fallback(client, rewrite_messages, max_tokens=2400, temperature=0.2)
+        if not result:
+            result = cleaned
+
+        brief = ProspectBrief(company_id=None, brief_text=result, brief_type=brief_type)
+        session.add(brief)
+        session.commit()
 
         return {"digest": result, "period": period}
     finally:

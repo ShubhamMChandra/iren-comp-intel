@@ -37,43 +37,36 @@ const TIER_ORDER: Record<Tier, number> = { "VERY HIGH": 0, "HIGH": 1, "MEDIUM": 
 
 function FormattedBrief({ text }: { text: string }) {
   return (
-    <div className="text-foreground/90">
+    <div className="space-y-2">
       <ReactMarkdown
         components={{
           p: ({ children }) => (
-            <p className="text-sm leading-relaxed mb-2 last:mb-0">{children}</p>
+            <p className="text-[13px] leading-[1.65] text-foreground/80">{children}</p>
           ),
-          strong: ({ children }) => {
-            const str = String(children)
-            const isSectionHeader = /^(THESIS|URGENCY|LEAD WITH|DECISION MAKERS|COMPETITIVE CONTEXT)$/i.test(str.trim())
-            return isSectionHeader ? (
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-foreground/70 mt-3 mb-0.5 first:mt-0">
-                {str}
-              </span>
-            ) : (
-              <strong className="font-semibold text-foreground">{children}</strong>
-            )
-          },
+          strong: ({ children }) => (
+            <strong className="font-semibold text-foreground">{children}</strong>
+          ),
           ul: ({ children }) => (
-            <ul className="space-y-1 my-1.5">{children}</ul>
+            <ul className="space-y-[3px] mt-1">{children}</ul>
           ),
           ol: ({ children }) => (
-            <ol className="space-y-1 my-1.5 list-decimal list-inside">{children}</ol>
+            <ol className="space-y-[3px] mt-1 list-decimal ml-4">{children}</ol>
           ),
           li: ({ children }) => (
-            <li className="text-sm leading-relaxed flex gap-1.5">
-              <span className="text-foreground/50 shrink-0 mt-0.5">–</span>
-              <span>{children}</span>
-            </li>
+            <li className="text-[13px] leading-[1.65] text-foreground/80 pl-3 -indent-3 ml-3">{children}</li>
           ),
           h1: ({ children }) => (
-            <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/70 mt-3 mb-0.5 first:mt-0">{children}</p>
+            <div className="pt-3 first:pt-0 pb-0.5 border-b border-border/30">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-foreground/50">{children}</p>
+            </div>
           ),
           h2: ({ children }) => (
-            <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/70 mt-3 mb-0.5 first:mt-0">{children}</p>
+            <div className="pt-3 first:pt-0 pb-0.5 border-b border-border/30">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-foreground/50">{children}</p>
+            </div>
           ),
           h3: ({ children }) => (
-            <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/70 mt-3 mb-0.5 first:mt-0">{children}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-foreground/50 pt-2">{children}</p>
           ),
         }}
       >
