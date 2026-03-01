@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getLandscape, getDealThreats, generateBattlecard } from "@/lib/api"
 import { cn, formatDate } from "@/lib/utils"
-import type { LandscapeData, Competitor, ActivityFeedItem, DealThreat, DealThreatsData } from "@/lib/types"
+import type { LandscapeData, ActivityFeedItem, DealThreat, DealThreatsData } from "@/lib/types"
 import {
   Globe,
   Swords,
@@ -23,7 +23,6 @@ import {
   Activity,
   Shield,
   TrendingUp,
-  Zap,
   ExternalLink,
   AlertTriangle,
   CheckCircle,
@@ -31,11 +30,12 @@ import {
   Flame,
   Target,
   BookOpen,
-  ChevronRight,
 } from "lucide-react"
 
 type SortKey = "capacity_mw" | "gpu_count" | "signal_count_30d" | "name" | "threat_level"
 type SortDir = "asc" | "desc"
+
+const THREAT_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 }
 
 const SEGMENT_COLORS: Record<string, string> = {
   "Neocloud": "text-violet-400 bg-violet-400/10 border-violet-400/20",
@@ -124,7 +124,7 @@ export default function CompetePage() {
 
   const competitors = useMemo(() => data?.competitors ?? [], [data?.competitors])
   const iren = data?.iren ?? null
-  const activityFeed = data?.activity_feed ?? []
+  const activityFeed = useMemo(() => data?.activity_feed ?? [], [data?.activity_feed])
 
   const eventsThisWeek = activityFeed.filter((item) => {
     if (!item.detected_at) return false
@@ -172,14 +172,12 @@ export default function CompetePage() {
     return Object.entries(counts).sort((a, b) => b[1] - a[1])
   }, [competitors])
 
-  const threatOrder: Record<string, number> = { high: 0, medium: 1, low: 2 }
-
   const filtered = useMemo(() => {
     let list = activeSegment ? competitors.filter((c) => c.segment === activeSegment) : competitors
     list = [...list].sort((a, b) => {
       if (sortKey === "threat_level") {
-        const aOrd = threatOrder[a.threat_level] ?? 1
-        const bOrd = threatOrder[b.threat_level] ?? 1
+        const aOrd = THREAT_ORDER[a.threat_level] ?? 1
+        const bOrd = THREAT_ORDER[b.threat_level] ?? 1
         return sortDir === "asc" ? aOrd - bOrd : bOrd - aOrd
       }
       const aVal = a[sortKey] ?? (sortKey === "name" ? "" : -1)

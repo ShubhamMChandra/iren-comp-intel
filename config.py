@@ -15,6 +15,11 @@ DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'data' / 'iren_
 # CORS — wildcard in dev; set CORS_ORIGINS=https://app.example.com in production
 CORS_ORIGINS: list[str] = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()] or ["*"]
 
+# Logging — INFO default; set LOG_LEVEL=DEBUG or VERBOSE=1 for verbose
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+if os.getenv("VERBOSE", "").strip().lower() in ("1", "true", "yes"):
+    LOG_LEVEL = "DEBUG"
+
 # OpenRouter (OpenAI-compatible API) — used for all AI features
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 AI_MODEL = os.getenv("AI_MODEL", "google/gemini-2.0-flash-001")
@@ -27,6 +32,10 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "") or AI_MODEL
 # Ollama (local) — used for embeddings only
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+
+# HuggingFace Inference API — cloud fallback for embeddings when Ollama isn't running
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+HF_EMBED_MODEL = os.getenv("HF_EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
 # Four-tier LLM models (via OpenRouter)
 AI_MODEL_BULK = os.getenv("AI_MODEL_BULK", "google/gemini-2.5-flash")

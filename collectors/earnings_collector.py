@@ -15,8 +15,11 @@ EDGAR_SEARCH_URL = "https://efts.sec.gov/LATEST/search-index"
 EARNINGS_FORMS = "8-K,10-K,10-Q"
 AI_COMPUTE_QUERY = '("{company}" AND ("artificial intelligence" OR "GPU" OR "compute infrastructure" OR "data center" OR "machine learning"))'
 
-CAPEX_KEYWORDS = ["capex", "capital expenditure", "infrastructure investment"]
-CAPACITY_KEYWORDS = ["capacity", "outgrow", "constraint"]
+CAPEX_KEYWORDS = ["capex", "capital expenditure", "infrastructure investment",
+                   "cloud spend", "cloud cost", "compute cost",
+                   "gpu spend", "ai infrastructure spend"]
+CAPACITY_KEYWORDS = ["capacity constraint", "outgrow", "capacity limit",
+                     "oversubscribed", "waitlist", "resource constraint"]
 
 
 class EarningsCollector(BaseCollector):

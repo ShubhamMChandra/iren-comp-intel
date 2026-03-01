@@ -45,10 +45,19 @@ def _migrate_prospect_briefs_nullable(conn) -> None:
 
 
 def init_db():
-    """Create all tables and apply lightweight schema migrations."""
+    """Create all tables, apply migrations, and auto-seed if the DB is empty."""
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
         _migrate_prospect_briefs_nullable(conn)
+
+    session = SessionLocal()
+    try:
+        from database.models import Company
+        if session.query(Company).count() == 0:
+            from database.seed import seed_database
+            seed_database()
+    finally:
+        session.close()
 
 
 def get_session():

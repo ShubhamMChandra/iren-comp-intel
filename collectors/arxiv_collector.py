@@ -13,7 +13,10 @@ from database.models import Company
 SCALE_KEYWORDS = [
     "large-scale", "billion parameter", "gpu", "cluster",
     "distributed training", "scaling", "infrastructure",
-    "compute", "h100", "tpu",
+    "compute", "h100", "h200", "b200", "tpu",
+    "pretraining", "pre-training", "fine-tuning", "finetuning",
+    "training run", "inference", "serving",
+    "mixture of experts", "moe", "rlhf", "alignment",
 ]
 
 

@@ -15,6 +15,8 @@ from collectors.edgar_rss_collector import EdgarRSSCollector
 from collectors.peeringdb_collector import PeeringDBCollector
 from collectors.press_release_collector import PressReleaseCollector
 from collectors.trends_collector import TrendsCollector
+from collectors.vedp_collector import VEDPCollector
+from collectors.loudoun_dc_collector import LoudounDCCollector
 from collectors.funding_collector import FundingCollector
 from collectors.github_collector import GitHubCollector
 from collectors.hn_collector import HNCollector
@@ -38,6 +40,8 @@ COLLECTORS = {
     "edgar_rss": EdgarRSSCollector,
     "peeringdb": PeeringDBCollector,
     "trends": TrendsCollector,
+    "vedp": VEDPCollector,
+    "loudoun_dc": LoudounDCCollector,
 }
 
 

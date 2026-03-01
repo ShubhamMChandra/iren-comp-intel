@@ -11,8 +11,10 @@ from collectors.base import BaseCollector
 from database.models import Company
 
 HIRING_KEYWORDS = ["hiring", "jobs", "who is hiring"]
-FUNDING_KEYWORDS = ["raised", "raises", "funding", "series", "valued at"]
-OUTGROWING_KEYWORDS = ["outgrew", "switching", "migrating from", "leaving", "dropped"]
+FUNDING_COMPLETED_KEYWORDS = ["raised", "raises", "secured", "closed", "valued at"]
+FUNDRAISING_KEYWORDS = ["seeking", "in talks", "exploring ipo", "fundrais", "looking to raise"]
+OUTGROWING_KEYWORDS = ["outgrew", "switching", "migrating from", "leaving", "dropped",
+                       "waitlist", "oversubscribed", "capacity"]
 
 
 class HNCollector(BaseCollector):
@@ -74,7 +76,9 @@ class HNCollector(BaseCollector):
         lower = title.lower()
         if any(kw in lower for kw in HIRING_KEYWORDS):
             return "hiring"
-        if any(kw in lower for kw in FUNDING_KEYWORDS):
+        if any(kw in lower for kw in FUNDRAISING_KEYWORDS):
+            return "fundraising"
+        if any(kw in lower for kw in FUNDING_COMPLETED_KEYWORDS):
             return "funding_completed"
         if any(kw in lower for kw in OUTGROWING_KEYWORDS):
             return "outgrowing"

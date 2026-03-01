@@ -26,6 +26,14 @@ out/
 # Railway (project link)
 .railway/
 
+# Test artifacts
+frontend/e2e/screenshots/
+frontend/test-results/
+playwright-report/
+
+# Cursor internal
+.cursor/plans/
+
 # IDE / OS
 .DS_Store
 .idea/

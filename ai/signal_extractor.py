@@ -75,17 +75,31 @@ def _fallback_extraction(title: str) -> dict:
     """Keyword-based fallback classification when no API key is set."""
     title_lower = title.lower()
 
-    if any(kw in title_lower for kw in ["raising", "seeks", "exploring ipo", "fundrais", "in talks"]):
+    if any(kw in title_lower for kw in [
+        "raising", "seeks", "exploring ipo", "fundrais", "in talks",
+        "seed round", "pre-seed", "bridge round", "growth round",
+    ]):
         return {"signal_type": "fundraising", "magnitude": 1.0, "confidence": 0.4, "key_facts": title}
-    if any(kw in title_lower for kw in ["raised", "raises", "secured", "closes", "series", "funding round"]):
+    if any(kw in title_lower for kw in [
+        "raised", "raises", "secured", "closes", "series", "funding round",
+    ]):
         return {"signal_type": "funding_completed", "magnitude": 1.0, "confidence": 0.4, "key_facts": title}
-    if any(kw in title_lower for kw in ["hiring", "hires", "job", "recruit", "engineer"]):
+    if any(kw in title_lower for kw in [
+        "hiring", "hires", "job", "recruit", "engineer", "sre", "mlops",
+    ]):
         return {"signal_type": "hiring", "magnitude": 1.0, "confidence": 0.4, "key_facts": title}
-    if any(kw in title_lower for kw in ["gpu", "model", "training", "ai", "infrastructure", "data center"]):
+    if any(kw in title_lower for kw in [
+        "gpu", "model", "training", "ai", "infrastructure", "data center",
+    ]):
         return {"signal_type": "ai_initiative", "magnitude": 1.0, "confidence": 0.3, "key_facts": title}
-    if any(kw in title_lower for kw in ["cloud cost", "repatriat", "optimize", "cloud spend"]):
+    if any(kw in title_lower for kw in [
+        "cloud cost", "repatriat", "cloud spend", "cloud bill", "egress",
+    ]):
         return {"signal_type": "cloud_spend", "magnitude": 1.0, "confidence": 0.3, "key_facts": title}
-    if any(kw in title_lower for kw in ["outgrow", "switch", "migrat", "waitlist", "capacity"]):
+    if any(kw in title_lower for kw in [
+        "outgrow", "switch", "migrat", "waitlist", "capacity constraint",
+        "oversubscribed",
+    ]):
         return {"signal_type": "outgrowing", "magnitude": 1.0, "confidence": 0.3, "key_facts": title}
 
     return {"signal_type": "other", "magnitude": 0, "confidence": 0.1, "key_facts": ""}

@@ -38,7 +38,14 @@ INFRA_KEYWORDS = [
     "training infrastructure",
     "inference infrastructure",
     "site reliability",
+    "sre",
     "devops",
+    "mlops",
+    "ml engineer",
+    "machine learning engineer",
+    "research scientist",
+    "research engineer",
+    "applied scientist",
     "nvidia",
     "nccl",
     "infiniband",
@@ -67,7 +74,7 @@ class JobsCollector(BaseCollector):
 
     def _search_jobs(self, company: Company):
         """Search for infrastructure-related job postings at a company."""
-        query = f'"{company.name}" hiring OR jobs "GPU" OR "infrastructure" OR "data center" OR "ML platform"'
+        query = f'"{company.name}" hiring OR jobs "GPU" OR "infrastructure" OR "data center" OR "ML engineer" OR "SRE" OR "MLOps"'
 
         try:
             url = GOOGLE_NEWS_JOBS.format(query=quote(query))

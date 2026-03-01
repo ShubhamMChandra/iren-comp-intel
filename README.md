@@ -234,11 +234,11 @@ cd frontend && npm install && npm run dev
 
 The app runs on Railway with two services in one project.
 
-**API** (existing): Root = repo root. Env: `DATABASE_URL=sqlite:////data/iren_intel.db`, `CORS_ORIGINS=*`. Add a **Volume** (mount `/data`) in the dashboard so SQLite persists. Deploy: `railway link` → `railway service api` → `railway up` from repo root.
+**API** (existing): Root = repo root. Env: `DATABASE_URL=sqlite:////data/iren_intel.db`, `CORS_ORIGINS=*`. Add a **Volume** (mount `/data`) in the dashboard so SQLite persists. Deploy: `./scripts/deploy_railway.sh api` (or `railway service api` → `railway up` from repo root).
 
-**Frontend**: In Railway dashboard, add a second service (Empty Service), name it `frontend`. Set **Root Directory** to `frontend`. Set env `NEXT_PUBLIC_API_URL` to your API URL (e.g. `https://api-production-xxx.up.railway.app`). Generate a domain for the frontend service. Deploy: `railway service frontend` → `railway up` from repo root (or trigger deploy from the UI).
+**Frontend**: In Railway dashboard, add a second service (Empty Service), name it `frontend`. Set **Root Directory** to `frontend`. Set env `NEXT_PUBLIC_API_URL` to your API URL (e.g. `https://api-production-xxx.up.railway.app`). Generate a domain for the frontend service. Step-by-step: see **docs/RAILWAY_FRONTEND_SETUP.md**. Deploy: `./scripts/deploy_railway.sh frontend` (or `railway service frontend` → `railway up` from repo root).
 
-See `api/README.md` for API-only deploy steps and volume setup.
+See `api/README.md` for API-only deploy steps and volume setup. **CLI:** `railway add --service frontend --variables "NEXT_PUBLIC_API_URL=https://api-production-fdb3.up.railway.app"` then `railway domain -s frontend`; set Root Directory to `frontend` in dashboard once. Full steps: `docs/RAILWAY_FRONTEND_SETUP.md`.
 
 ## Tech Stack
 

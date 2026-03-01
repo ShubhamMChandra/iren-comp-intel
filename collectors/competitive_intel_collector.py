@@ -14,7 +14,7 @@ except ImportError:
     DDGS = None
 
 SEARCH_TEMPLATES = [
-    '"{name}" data center expansion OR new facility OR deal OR contract 2025 2026',
+    '"{name}" data center expansion OR new facility OR deal OR contract',
     '"{name}" pricing OR GPU rates OR cost per hour OR kW pricing',
     '"{name}" partnership OR customer win OR signed agreement',
 ]

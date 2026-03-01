@@ -55,7 +55,9 @@ function DashboardSkeleton() {
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [digest, setDigest] = useState<string | null>(null)
-  const [digestPeriod, setDigestPeriod] = useState<string>("morning")
+  const [digestPeriod, setDigestPeriod] = useState<string>(() =>
+    new Date().getHours() < 14 ? "morning" : "afternoon"
+  )
   const [digestLoading, setDigestLoading] = useState(true)
   const [fundingSignals, setFundingSignals] = useState<Signal[]>([])
   const [loading, setLoading] = useState(true)
@@ -64,7 +66,6 @@ export default function DashboardPage() {
   useEffect(() => {
     let cancelled = false
     const period = new Date().getHours() < 14 ? "morning" : "afternoon"
-    setDigestPeriod(period)
 
     getDashboard()
       .then((d) => { if (!cancelled) setData(d) })

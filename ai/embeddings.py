@@ -1,13 +1,13 @@
 # Why: Local embeddings for dedup and search
-# Deps: Ollama HTTP API, config, json
-# How: Calls Ollama, compares cosine similarity, graceful fallback
+# Deps: Ollama HTTP API, HuggingFace API, config, json
+# How: Tries Ollama first, falls back to HF Inference API, then None
 
 import json
 import math
 
 import requests
 
-from config import OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL
+from config import HF_EMBED_MODEL, HF_TOKEN, OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL
 
 _OLLAMA_AVAILABLE: bool | None = None
 
@@ -31,45 +31,64 @@ def reset_ollama_check():
     _OLLAMA_AVAILABLE = None
 
 
-def get_embedding(text: str) -> list[float] | None:
-    """Embed text using Ollama. Returns a float vector or None if unavailable."""
-    if not text or not _check_ollama():
-        return None
-    try:
-        resp = requests.post(
-            f"{OLLAMA_BASE_URL}/api/embed",
-            json={"model": OLLAMA_EMBED_MODEL, "input": text},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        embeddings = data.get("embeddings")
-        if embeddings and len(embeddings) > 0:
-            return embeddings[0]
-        return None
-    except Exception:
-        return None
-
-
-def get_embeddings_batch(texts: list[str]) -> list[list[float] | None]:
-    """Embed multiple texts. Returns a list aligned with the input."""
-    if not texts or not _check_ollama():
+def _hf_embed(texts: list[str]) -> list[list[float] | None]:
+    """Embed via HuggingFace Inference API. Returns None per item on failure."""
+    if not HF_TOKEN:
         return [None] * len(texts)
     try:
         resp = requests.post(
-            f"{OLLAMA_BASE_URL}/api/embed",
-            json={"model": OLLAMA_EMBED_MODEL, "input": texts},
+            f"https://api-inference.huggingface.co/models/{HF_EMBED_MODEL}",
+            headers={"Authorization": f"Bearer {HF_TOKEN}"},
+            json={"inputs": texts, "options": {"wait_for_model": True}},
             timeout=30,
         )
         resp.raise_for_status()
-        data = resp.json()
-        embeddings = data.get("embeddings", [])
-        result = []
-        for i in range(len(texts)):
-            result.append(embeddings[i] if i < len(embeddings) else None)
-        return result
+        result = resp.json()
+        if isinstance(result, list) and len(result) == len(texts):
+            return result
+        return [None] * len(texts)
     except Exception:
         return [None] * len(texts)
+
+
+def get_embedding(text: str) -> list[float] | None:
+    """Embed text — tries Ollama first, then HF Inference API."""
+    if not text:
+        return None
+    if _check_ollama():
+        try:
+            resp = requests.post(
+                f"{OLLAMA_BASE_URL}/api/embed",
+                json={"model": OLLAMA_EMBED_MODEL, "input": text},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            embeddings = resp.json().get("embeddings")
+            if embeddings:
+                return embeddings[0]
+        except Exception:
+            pass
+    return _hf_embed([text])[0]
+
+
+def get_embeddings_batch(texts: list[str]) -> list[list[float] | None]:
+    """Embed multiple texts — tries Ollama first, then HF Inference API."""
+    if not texts:
+        return []
+    if _check_ollama():
+        try:
+            resp = requests.post(
+                f"{OLLAMA_BASE_URL}/api/embed",
+                json={"model": OLLAMA_EMBED_MODEL, "input": texts},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            embeddings = resp.json().get("embeddings", [])
+            result = [embeddings[i] if i < len(embeddings) else None for i in range(len(texts))]
+            return result
+        except Exception:
+            pass
+    return _hf_embed(texts)
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:

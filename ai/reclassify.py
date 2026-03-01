@@ -91,10 +91,17 @@ def _classify_with_keywords(title: str) -> str:
     if any(p in t for p in funding_patterns):
         return "funding_completed"
 
+    layoff_patterns = [
+        "layoff", "lay off", "laid off", "lays off", "job cuts",
+        "workforce reduction", "downsiz",
+    ]
+    if any(p in t for p in layoff_patterns):
+        return "other"
+
     hiring_patterns = [
         "hiring", "hires", "hire", "job", "recruit", "workforce",
-        "layoff", "headcount", "engineer", "permanent jobs",
-        "construction jobs",
+        "headcount", "engineer", "permanent jobs",
+        "construction jobs", "sre", "mlops", "ml engineer",
     ]
     if any(p in t for p in hiring_patterns):
         return "hiring"

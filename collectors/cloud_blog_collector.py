@@ -13,7 +13,12 @@ CLOUD_BLOG_FEEDS = [
     "https://azure.microsoft.com/en-us/blog/tag/ai/feed/",
 ]
 
-CLOUD_SPEND_KEYWORDS = ["cost", "pricing", "savings", "optimization"]
+CLOUD_SPEND_KEYWORDS = [
+    "cloud cost", "cloud pricing", "cloud savings", "cost optimization",
+    "cost reduction", "cloud spend", "repatriation", "cloud bill",
+    "egress cost", "reserved instance", "spot instance", "cloud budget",
+    "training cost", "gpu pricing", "savings plan",
+]
 
 
 class CloudBlogCollector(BaseCollector):

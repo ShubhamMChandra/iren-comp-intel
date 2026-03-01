@@ -481,10 +481,18 @@ class TestHNClassification:
     @pytest.mark.parametrize("title,expected", [
         ("Company X raised $50M Series B", "funding_completed"),
         ("Startup Y raises $200M at $2B valuation", "funding_completed"),
-        ("New funding round for AI lab", "funding_completed"),
         ("Series C valued at $5B", "funding_completed"),
+        ("AI lab secured $1B in new funding", "funding_completed"),
     ])
-    def test_funding_classification(self, classifier, title, expected):
+    def test_funding_completed_classification(self, classifier, title, expected):
+        assert classifier(title) == expected
+
+    @pytest.mark.parametrize("title,expected", [
+        ("AI lab seeking new funding round", "fundraising"),
+        ("Company exploring IPO in 2026", "fundraising"),
+        ("Startup in talks to raise $500M", "fundraising"),
+    ])
+    def test_fundraising_classification(self, classifier, title, expected):
         assert classifier(title) == expected
 
     @pytest.mark.parametrize("title,expected", [
@@ -533,6 +541,194 @@ class TestCloudBlogCompanyMatching:
         assert company_name.lower() not in text
 
 
+from collectors.vedp_collector import (
+    VEDPCollector,
+    _is_dc_related,
+    _extract_amount,
+    _extract_jobs,
+)
+from collectors.loudoun_dc_collector import LoudounDCCollector, _status_rank
+
+
+class TestVEDPHelpers:
+    """Test VEDP collector utility functions."""
+
+    @pytest.mark.parametrize("text,expected", [
+        ("New data center investment in Virginia", True),
+        ("Hyperscale campus announced in Loudoun", True),
+        ("Colocation facility breaks ground", True),
+        ("400 MW power purchase agreement signed", True),
+        ("Manufacturing plant creating 200 jobs", False),
+        ("Pharmaceutical company expands operations", False),
+    ])
+    def test_dc_keyword_detection(self, text, expected):
+        assert _is_dc_related(text) == expected
+
+    @pytest.mark.parametrize("text,expected", [
+        ("$2 billion investment in Virginia", 2_000_000_000.0),
+        ("$500 million data center campus", 500_000_000.0),
+        ("$1.5B commitment announced", 1_500_000_000.0),
+        ("no dollar amounts here", None),
+    ])
+    def test_investment_extraction(self, text, expected):
+        assert _extract_amount(text) == expected
+
+    @pytest.mark.parametrize("text,expected", [
+        ("creating 150 new jobs in Virginia", 150),
+        ("adding more than 1,000 jobs", 1000),
+        ("will support up to 50 new jobs", 50),
+        ("no job numbers mentioned", None),
+    ])
+    def test_jobs_extraction(self, text, expected):
+        assert _extract_jobs(text) == expected
+
+    def test_company_name_matching(self, session, sample_prospect):
+        """Collector should match known company names from press release text."""
+        collector = VEDPCollector.__new__(VEDPCollector)
+        collector.session = session
+        collector._name_map = {}
+        collector._build_name_map([sample_prospect])
+
+        text = f"Governor announces that {sample_prospect.name} will invest $1B in Virginia data center."
+        matched = collector._match_company(text)
+        assert matched is not None
+        assert matched.id == sample_prospect.id
+
+    def test_no_match_returns_none(self, session):
+        """Unknown company name should return None."""
+        collector = VEDPCollector.__new__(VEDPCollector)
+        collector.session = session
+        collector._name_map = {}
+
+        result = collector._match_company("UnknownCompanyXYZ builds new facility")
+        assert result is None
+
+    def test_signal_type_funding_when_investment_present(self, session, sample_prospect):
+        """When investment amount found, signal type should be funding_completed."""
+        collector = VEDPCollector.__new__(VEDPCollector)
+        collector.session = session
+        collector.signals_created = 0
+        collector.semantic_dupes_caught = 0
+        collector._name_map = {}
+        collector._build_name_map([sample_prospect])
+
+        entry = {
+            "title": f"{sample_prospect.name} invests $2 billion in Virginia data center campus",
+            "url": "https://www.vedp.org/press-release/2025-11/test",
+            "published": "Sat, 01 Nov 2025 12:00:00 +0000",
+            "summary": f"{sample_prospect.name} will create 150 jobs. 500 MW data center facility.",
+        }
+        collector._process_entry(entry)
+        session.commit()
+
+        signals = session.query(Signal).filter(Signal.company_id == sample_prospect.id).all()
+        assert len(signals) == 1
+        assert signals[0].signal_type == "funding_completed"
+        assert signals[0].magnitude > 1.0
+
+
+class TestLoudounDCCollector:
+    """Test Loudoun County DC collector logic."""
+
+    @pytest.mark.parametrize("status,expected_rank", [
+        ("Entitled", 0),
+        ("Under Construction", 1),
+        ("Built", 2),
+        ("unknown status", -1),
+        (None, -1),
+    ])
+    def test_status_rank(self, status, expected_rank):
+        assert _status_rank(status) == expected_rank
+
+    @pytest.mark.parametrize("old_status,new_status,should_progress", [
+        ("Entitled", "Under Construction", True),
+        ("Under Construction", "Built", True),
+        ("Entitled", "Built", True),
+        ("Built", "Under Construction", False),
+        ("Under Construction", "Entitled", False),
+        ("Built", "Built", False),
+        (None, "Entitled", True),
+    ])
+    def test_status_progression_detection(self, old_status, new_status, should_progress):
+        collector = LoudounDCCollector.__new__(LoudounDCCollector)
+        result = collector._status_progressed(old_status, new_status)
+        assert result == should_progress
+
+    def test_new_record_creates_signal(self, session, sample_prospect):
+        """New COM_DATA_CENTER record matching a known company should create signal."""
+        collector = LoudounDCCollector.__new__(LoudounDCCollector)
+        collector.session = session
+        collector.signals_created = 0
+        collector.semantic_dupes_caught = 0
+        collector._name_map = {}
+        collector._build_name_map([sample_prospect])
+        collector._prev_state = {}
+
+        attrs = {
+            "OBJECTID": 999,
+            "LU_DISPLAY": sample_prospect.name,
+            "LU_DEVELOP_STATUS": "Entitled",
+            "LU_NON_RES_SQ_FT": 250_000,
+            "LU_ADDRESS": "123 Data Center Rd, Ashburn, VA",
+        }
+        collector._handle_new_record(
+            attrs,
+            display=sample_prospect.name,
+            status="Entitled",
+            sqft=250_000,
+            address="123 Data Center Rd, Ashburn, VA",
+        )
+        session.commit()
+
+        signals = session.query(Signal).filter(Signal.company_id == sample_prospect.id).all()
+        assert len(signals) == 1
+        assert signals[0].signal_type == "outgrowing"
+
+    def test_status_change_creates_signal(self, session, sample_prospect):
+        """Status change for known company should create outgrowing signal."""
+        collector = LoudounDCCollector.__new__(LoudounDCCollector)
+        collector.session = session
+        collector.signals_created = 0
+        collector.semantic_dupes_caught = 0
+        collector._name_map = {}
+        collector._build_name_map([sample_prospect])
+
+        collector._handle_status_change(
+            attrs={},
+            display=sample_prospect.name,
+            old_status="Entitled",
+            new_status="Under Construction",
+            sqft=500_000,
+            address="456 Tech Park Dr, Ashburn, VA",
+        )
+        session.commit()
+
+        signals = session.query(Signal).filter(Signal.company_id == sample_prospect.id).all()
+        assert len(signals) == 1
+        assert signals[0].signal_type == "outgrowing"
+        assert "Under Construction" in signals[0].title
+
+    def test_no_company_match_no_signal(self, session):
+        """Unknown company in Loudoun record should not create a signal."""
+        collector = LoudounDCCollector.__new__(LoudounDCCollector)
+        collector.session = session
+        collector.signals_created = 0
+        collector.semantic_dupes_caught = 0
+        collector._name_map = {}
+
+        collector._handle_new_record(
+            attrs={},
+            display="UnknownCorpXYZ Data Center",
+            status="Entitled",
+            sqft=100_000,
+            address="999 Unknown Rd",
+        )
+        session.commit()
+
+        signals = session.query(Signal).all()
+        assert len(signals) == 0
+
+
 class TestCloudBlogClassification:
     """Test blog post title → signal type classification."""
 
@@ -543,9 +739,10 @@ class TestCloudBlogClassification:
 
     @pytest.mark.parametrize("title,expected", [
         ("Reduce your ML training cost by 40%", "cloud_spend"),
-        ("New pricing for GPU instances", "cloud_spend"),
+        ("New GPU pricing tiers for compute workloads", "cloud_spend"),
         ("Cost optimization strategies for AI workloads", "cloud_spend"),
         ("Savings plans for compute-intensive workloads", "cloud_spend"),
+        ("Cloud cost reduction with reserved instances", "cloud_spend"),
     ])
     def test_spend_keywords_classify_as_cloud_spend(self, classifier, title, expected):
         assert classifier(title) == expected

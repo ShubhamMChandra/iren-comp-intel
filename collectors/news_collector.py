@@ -101,6 +101,7 @@ class NewsCollector(BaseCollector):
             f'"{name}" GPU OR "data center" OR HPC OR "compute capacity"',
             f'"{name}" fundraising OR "Series" OR funding OR IPO',
             f'"{name}" AI infrastructure OR "model training"',
+            f'"{name}" "capacity constraint" OR waitlist OR "switching provider" OR outgrowing',
         ]
         if company.company_type == "competitor":
             base_queries.append(f'"{name}" expansion OR "new facility" OR contract OR deal')

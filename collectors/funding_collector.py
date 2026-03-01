@@ -30,6 +30,11 @@ FUNDRAISING_PATTERNS = [
     r"considering.*offering",
     r"preparing.*ipo",
     r"roadshow",
+    r"pre.?seed",
+    r"seed\s+round",
+    r"bridge\s+(round|funding|loan)",
+    r"growth\s+round",
+    r"extension\s+round",
 ]
 
 COMPLETED_FUNDING_PATTERNS = [

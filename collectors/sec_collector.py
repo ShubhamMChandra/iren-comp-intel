@@ -10,7 +10,7 @@ Monitors:
 The SEC EDGAR API is free and requires only a User-Agent header.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import requests
 from dateutil import parser as dateparser
@@ -92,7 +92,7 @@ class SECCollector(BaseCollector):
             params = {
                 "q": f'"{company.name}"',
                 "dateRange": "custom",
-                "startdt": "2025-01-01",
+                "startdt": (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d"),
                 "enddt": datetime.now().strftime("%Y-%m-%d"),
                 "forms": "8-K,S-1,10-K,10-Q",
             }

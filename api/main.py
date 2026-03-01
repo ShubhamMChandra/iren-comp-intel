@@ -9,6 +9,20 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from config import (
+    CORS_ORIGINS,
+    LOG_LEVEL,
+    SIGNAL_TYPES,
+    IREN_BENCHMARK,
+    COMPETITOR_SEGMENTS,
+    COMPETITOR_SEGMENT_DEFAULT,
+    SEGMENT_PROFILES,
+    PRODUCT_FIT_TO_SEGMENTS,
+)
+
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -16,10 +30,8 @@ from starlette.requests import Request
 from pydantic import BaseModel
 
 logger = logging.getLogger("iren.api")
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
-
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+_level = getattr(logging, LOG_LEVEL, logging.INFO)
+logging.basicConfig(level=_level, format="%(levelname)s %(name)s %(message)s")
 
 from database.db import get_session, init_db
 from database.models import Company, CompetitorEvent, Contact, ProspectBrief, ProspectScore, Signal
@@ -30,15 +42,6 @@ from ai.brief_generator import generate_brief, generate_outreach_email, generate
 from ai.client import get_ai_client, call_premium, call_with_fallback
 from ai.brief_generator import _build_iren_context, _funding_stage, PRODUCT_FIT_LABELS
 from ai.embeddings import deserialize_embedding, cosine_similarity
-from config import (
-    CORS_ORIGINS,
-    SIGNAL_TYPES,
-    IREN_BENCHMARK,
-    COMPETITOR_SEGMENTS,
-    COMPETITOR_SEGMENT_DEFAULT,
-    SEGMENT_PROFILES,
-    PRODUCT_FIT_TO_SEGMENTS,
-)
 
 init_db()
 
@@ -850,7 +853,7 @@ def dashboard():
                 "primary_contact": _primary_contact(company.id),
                 "score_breakdown": _score_breakdown(score),
             })
-            if len(call_list) >= 12:
+            if len(call_list) >= 8:
                 break
 
         cooling = []
@@ -1278,3 +1281,70 @@ def seed_db(req: SeedRequest | None = Body(default=None)):
 def rescore():
     scores = score_all_prospects()
     return {"status": "rescored", "count": len(scores)}
+
+
+class CollectRequest(BaseModel):
+    collectors: list[str] | None = None  # None = run all
+
+
+@app.post("/api/admin/collect")
+def run_collect(req: CollectRequest | None = Body(default=None)):
+    """Run data collectors then rescore. Safe to call from a cron job."""
+    import threading
+
+    opts = req if req is not None else CollectRequest()
+
+    def _run():
+        from collectors.runner import run_collectors
+        run_collectors(opts.collectors)
+        score_all_prospects()
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    return {"status": "started", "collectors": opts.collectors or "all"}
+
+
+class SignalImport(BaseModel):
+    company_id: int
+    signal_type: str
+    title: str
+    summary: str | None = None
+    source_url: str | None = None
+    source_type: str = "industry_news"
+    magnitude: float | None = None
+    is_active: bool = True
+    raw_data: str | None = None
+    embedding: str | None = None
+    action_window: str | None = None
+    action_insight: str | None = None
+    detected_at: str | None = None
+
+
+@app.post("/api/admin/import-signals")
+def import_signals(signals: list[SignalImport]):
+    from datetime import datetime
+    session = get_session()
+    inserted = 0
+    try:
+        for s in signals:
+            obj = Signal(
+                company_id=s.company_id,
+                signal_type=s.signal_type,
+                title=s.title,
+                summary=s.summary,
+                source_url=s.source_url,
+                source_type=s.source_type,
+                magnitude=s.magnitude,
+                is_active=s.is_active,
+                raw_data=s.raw_data,
+                embedding=s.embedding,
+                action_window=s.action_window,
+                action_insight=s.action_insight,
+                detected_at=datetime.fromisoformat(s.detected_at) if s.detected_at else datetime.utcnow(),
+            )
+            session.add(obj)
+            inserted += 1
+        session.commit()
+    finally:
+        session.close()
+    return {"status": "imported", "count": inserted}
