@@ -18,6 +18,7 @@ export type SignalType =
   | "ai_initiative"
   | "cloud_spend"
   | "outgrowing"
+  | "other"
 
 export type ProductFit = "ai_cloud" | "colocation" | "build_to_suit"
 

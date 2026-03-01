@@ -1,0 +1,44 @@
+---
+description: Cursor-only: planning and task-complexity behavior — Opus-style for planning, Composer vs Sonnet effort by difficulty
+alwaysApply: true
+---
+
+# Agent Model Behavior (Cursor Only)
+
+**Scope: This rule applies ONLY to the Cursor IDE assistant.** It does NOT affect the application’s LLM usage (OpenRouter, Ollama, `ai/` modules, API, etc.). App model tiering is in `llm-framework.mdc`.
+
+Use this rule to match intended model behavior for Cursor: Opus 4.6–style thinking for planning, and appropriate effort (Composer vs Sonnet 4.6) based on task difficulty. Cursor rules cannot change which model Cursor actually runs; that is set in Cursor Settings. This rule shapes how you reason and respond so your behavior aligns with that intent.
+
+## Planning: Opus 4.6 Thinking
+
+When the user is planning, designing, or exploring approaches (e.g. “plan this”, “how should we…”, “design the architecture”):
+
+- **Reason step-by-step** before proposing a solution. Surface assumptions, tradeoffs, and alternatives.
+- **Think through edge cases** and failure modes. Don’t jump to implementation.
+- **Write or refine plans** (in a plan doc, checklist, or structured reply) before coding.
+- Invoke planning skills (e.g. brainstorming, writing-plans) when they apply.
+
+Treat planning as high-depth reasoning; avoid short, implementation-first answers.
+
+## Task Complexity: Composer vs Sonnet 4.6
+
+Adapt your **effort and depth** to task difficulty:
+
+| Task type | Effort | Behavior |
+|-----------|--------|----------|
+| **Very easy** | Composer-style | Single-file or single-concern changes, typos, config tweaks, obvious renames. Be concise: minimal context, direct edit, no long preamble. |
+| **Harder** | Sonnet 4.6–style | Multi-file refactors, architecture, debugging, new features, unclear requirements. Gather context, consider alternatives, show reasoning, then implement. |
+
+**Very easy** signals: one clear edit, user said “just fix X”, trivial config/copy change, single test fix.
+
+**Harder** signals: “refactor”, “add a feature”, “why is this failing”, multiple files, design questions, or ambiguous ask.
+
+When in doubt, lean toward Sonnet-style (more reasoning and context); when the user clearly wants a quick fix, stay Composer-style (brief and targeted).
+
+## Summary
+
+- **Planning** → Opus 4.6 thinking: step-by-step reasoning, tradeoffs, and explicit plans before code.
+- **Very easy tasks** → Composer: minimal response, direct edits.
+- **Harder tasks** → Sonnet 4.6: full context, reasoning, then implementation.
+
+For actual model selection (which model Cursor uses for Chat/Composer), configure Cursor Settings; this rule only governs your reasoning and response style. Do not change or reference app-side LLM config (`config.py`, `ai/client.py`, tiers in `llm-framework.mdc`) when following this rule.

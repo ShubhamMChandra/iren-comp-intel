@@ -1,10 +1,10 @@
 # Iren Sales Intelligence Platform
 
-Signal-driven GTM intelligence for Iren's commercial team — 290 prospects across 15 segments, 24 competitors across 6 market segments, 15 data collectors, AI-generated briefs, and a scoring engine that surfaces timing.
+Signal-driven GTM intelligence for Iren's commercial team — 396 prospects across 17 segments, 24 competitors across 6 market segments, 19 data collectors (including Virginia land-use and incentive pipelines), AI-generated briefs, and a scoring engine that surfaces timing.
 
 ## The Problem
 
-Iren sells $10M+ infrastructure deals — GPU cloud, colocation, build-to-suit data centers — to AI labs, enterprise companies, and hyperscalers. The commercial team tracks 290 prospects across segments from foundation model labs to quant trading firms to defense contractors. Manual signal tracking doesn't scale. By the time a rep reads about a funding round in the news, the prospect has already fielded five vendor calls. The companies that win these deals detect need before budget, and detect budget before evaluation.
+Iren sells $10M+ infrastructure deals — GPU cloud, colocation, build-to-suit data centers — to AI labs, enterprise companies, and hyperscalers. The commercial team tracks 396 prospects across segments from foundation model labs to quant trading firms to defense contractors. Manual signal tracking doesn't scale. By the time a rep reads about a funding round in the news, the prospect has already fielded five vendor calls. The companies that win these deals detect need before budget, and detect budget before evaluation.
 
 This platform automates that. Public signals are collected continuously, scored for urgency, and translated into prioritized outreach with timing windows and recommended next actions.
 
@@ -18,9 +18,9 @@ Signal intelligence mapped to the buyer journey. Every prospect signal maps to o
 
 **Actively Evaluating** — Company is outgrowing current provider. Capacity complaints, migration signals, vendor switching discussions. This is the highest-urgency window — they're in-market now.
 
-15 data collectors pull from free public sources. A weighted scoring engine with exponential recency decay ranks prospects across 6 signal categories (max 100 points). AI-generated briefs surface what happened, why it matters, what to do, and by when. Four-tier LLM cost model runs the entire collection pipeline for ~$0.15/run, with a premium Opus 4.6 tier for the daily digest.
+19 data collectors pull from free public sources. A weighted scoring engine with exponential recency decay ranks prospects across 6 signal categories (max 100 points). AI-generated briefs surface what happened, why it matters, what to do, and by when. Four-tier LLM cost model runs the entire collection pipeline for ~$0.15/run, with a premium Opus 4.6 tier for the daily digest.
 
-A competitive intelligence layer tracks 24 competitors across 6 market segments (Neocloud, Hyperscaler, DC REIT, Power-First, International, Miner-to-HPC), each profiled with key customers, pricing intel, strengths/weaknesses, and an Iren-relative threat level. Prospect-level competitive context maps which competitors a rep is likely bidding against for any given deal, based on the prospect's product fit.
+A competitive intelligence layer tracks 24 competitors across 6 market segments (Neocloud, Hyperscaler, DC REIT, Power-First, International, Miner-to-HPC), each profiled with key customers, pricing intel, strengths/weaknesses, and an Iren-relative threat level. Prospect-level competitive context maps which competitors a rep is likely bidding against for any given deal, based on the prospect's product fit. A Virginia-specific data layer monitors VEDP press releases, county-level ArcGIS land-use datasets (Loudoun and Prince William), and state incentive reports to detect data center builds and grant recipients in Iren's home market.
 
 ## Architecture
 
@@ -29,11 +29,11 @@ A competitive intelligence layer tracks 24 competitors across 6 market segments 
 │  DATA SOURCES (all free)                                        │
 │  RSS Feeds · Google News · SEC EDGAR · ATS (Greenhouse/Lever)   │
 │  Earnings Transcripts · GitHub · ArXiv · Hacker News · Blogs    │
-│  DuckDuckGo Search (competitive intel)                          │
+│  DuckDuckGo Search · VEDP · Loudoun/PWC ArcGIS · VEDP PDFs     │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
                     ┌──────▼──────┐
-                    │ 15 Collectors   │
+                    │ 19 Collectors   │
                     │ (Python)        │
                     └──────┬──────┘
                            │
@@ -109,30 +109,40 @@ Each signal carries an urgency level (URGENT / HIGH / MEDIUM) and an action temp
 | `edgar_rss` | SEC EDGAR RSS (real-time filings) | fundraising, funding_completed | Free |
 | `peeringdb` | PeeringDB API (network facility data) | cloud_spend | Free |
 | `trends` | Google Trends (search interest) | ai_initiative | Free |
+| `vedp` | VEDP press releases + sitemap | cloud_spend, ai_initiative | Free |
+| `loudoun_dc` | Loudoun County ArcGIS BuildOut API | cloud_spend | Free |
+| `pwc_dc` | Prince William County ArcGIS FeatureServer | cloud_spend | Free |
+| `cof` | VEDP COF/VJIP incentive PDF reports | funding_completed | Free |
 
-All collectors inherit from `BaseCollector` which handles session management, semantic dedup via Ollama embeddings, and per-item error isolation (one failed article doesn't skip the rest). The `competitive_intel` collector searches for each competitor's recent deals, expansions, pricing changes, and talent moves, creating `CompetitorEvent` rows (separate from prospect signals).
+All collectors inherit from `BaseCollector` which handles session management, semantic dedup via Ollama embeddings, and per-item error isolation (one failed article doesn't skip the rest). The `competitive_intel` collector searches for each competitor's recent deals, expansions, pricing changes, and talent moves, creating `CompetitorEvent` rows (separate from prospect signals). After collection, a signal reclassification pass runs to normalize signal types using keyword matching.
+
+The four Virginia collectors form a local market intelligence layer: VEDP tracks state economic development press releases for data center investments, Loudoun and Prince William County collectors monitor ArcGIS land-use datasets for new builds and status changes, and the COF collector parses VEDP's semi-annual incentive PDF reports (COF and VJIP programs) to detect which companies received state grants.
 
 ## Prospect Coverage
 
-290 prospects across 15 segments, each tagged with a product fit (AI Cloud, Colocation, or Build-to-Suit):
+396 prospects across 17 segments, each tagged with a product fit (AI Cloud, Colocation, or Build-to-Suit):
 
 | Segment | Count | Product Fit |
 |---------|-------|-------------|
-| AI Labs / Foundation Models | 10 | Build-to-Suit |
-| Well-Funded AI Startups | 10 | AI Cloud |
-| Enterprise AI / Large Tech | 8 | Colocation |
-| Hyperscalers (Overflow) | 10 | Build-to-Suit |
-| AI-Native (Inference, SaaS) | 32 | AI Cloud |
-| AI Infrastructure (MLOps, Vector DBs, Serving) | 32 | AI Cloud |
-| Enterprise Software Adding AI | 54 | Colocation |
-| Biotech / Pharma | 29 | AI Cloud |
-| Fintech / Quant Trading | 24 | Colocation |
-| Gaming / Media | 19 | Colocation |
-| Government / Defense | 17 | Colocation |
+| Enterprise Software | 52 | Colocation |
+| Biotech / Pharma / Healthcare | 48 | AI Cloud |
+| AI Infrastructure & Developer Tools | 45 | AI Cloud |
+| AI-Native Applications | 43 | AI Cloud |
+| Fintech / Quantitative Trading | 39 | Colocation |
+| AI Research / Foundation Models | 33 | AI Cloud |
+| Government / Defense | 22 | Colocation |
+| Gaming / Media / Entertainment | 21 | Colocation |
+| Data Infrastructure | 20 | Colocation |
+| Technology / Hyperscalers | 16 | Build-to-Suit |
 | Crypto / Web3 | 13 | AI Cloud |
-| Mid-Market AI Adopters | 32 | AI Cloud |
+| Specialized AI Applications | 13 | AI Cloud |
+| Autonomous Vehicles / Robotics | 10 | AI Cloud |
+| Cybersecurity | 8 | AI Cloud |
+| Bitcoin Mining / AI Infrastructure | 8 | Build-to-Suit |
+| Infrastructure / Energy | 4 | Build-to-Suit |
+| Enterprise AI / Data Analytics | 1 | Colocation |
 
-**Product fit distribution:** 139 AI Cloud, 135 Colocation, 16 Build-to-Suit.
+**Product fit distribution:** 193 AI Cloud, 168 Colocation, 35 Build-to-Suit.
 
 ## Competitive Intelligence
 
@@ -242,7 +252,7 @@ See `api/README.md` for API-only deploy steps and volume setup. **CLI:** `railwa
 
 ## Tech Stack
 
-Python 3.14, FastAPI, SQLAlchemy 2.x, SQLite, OpenRouter (Kimi K2 + Gemini 2.5 Flash), Ollama (`nomic-embed-text`), Next.js 16, React 19, Tailwind CSS 4, shadcn/ui, Recharts, TanStack Table.
+Python 3.14, FastAPI, SQLAlchemy 2.x, SQLite, OpenRouter (Kimi K2 + Gemini 2.5 Flash), Ollama (`nomic-embed-text`), pdfplumber, Next.js 16, React 19, Tailwind CSS 4, shadcn/ui, Recharts, TanStack Table.
 
 ## Cost Model
 

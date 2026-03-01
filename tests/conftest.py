@@ -17,6 +17,17 @@ from sqlalchemy.orm import sessionmaker
 
 from database.models import Base, Company, Signal, ProspectScore, CompetitorEvent
 
+_HAS_PRIVATE = False
+try:
+    import private  # noqa: F401
+    _HAS_PRIVATE = True
+except ImportError:
+    pass
+
+needs_private = pytest.mark.skipif(
+    not _HAS_PRIVATE, reason="requires private/ config module"
+)
+
 
 @pytest.fixture()
 def engine():

@@ -23,7 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <TooltipProvider>
             <SidebarProvider>
               <AppSidebar />
-              <main className="flex-1 overflow-auto">
+              <main className="flex-1 min-w-0 overflow-auto">
                 <MobileHeader />
                 {children}
               </main>
