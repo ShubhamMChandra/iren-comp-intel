@@ -32,9 +32,97 @@ The scoring engine weights signals by product fit so reps know who to call, why,
 
 ---
 
+## Scoring Model
+
+6 signal categories. Max 100 points. Exponential recency decay.
+
+| Signal | Max Points | Base Points | Half-Life | Buyer Stage | Urgency |
+|---|---|---|---|---|---|
+| Hiring | 25 | 3 per posting | 45 days | Need Detected | MEDIUM |
+| Fundraising | 20 | 15 | 30 days | Budget Available | HIGH |
+| Cloud Spend | 15 | 10 | 60 days | Need Detected | MEDIUM |
+| Funding Completed | 15 | 10 | 60 days | Budget Available | HIGH |
+| AI Initiative | 15 | 8 | 45 days | Need Detected | MEDIUM |
+| Outgrowing | 10 | 8 | 30 days | Actively Evaluating | URGENT |
+
+The scoring is not a signal count. It is a **decay function that surfaces timing**.
+
+**Formula:** `points = base_points × recency_decay × magnitude_multiplier × source_confidence`, capped per category.
+
+**Recency decay** is exponential with per-signal-type half-lives. A fundraising signal retains 97.7% of its score after 1 day, 50% after 30 days, and 12.5% after 90. The half-lives encode how fast a signal loses decision relevance: fundraising and outgrowing decay fastest (30 days) because they represent narrow timing windows. Cloud spend decays slowest (60 days) because repatriation decisions unfold over quarters.
+
+**Magnitude multipliers** scale funding signals nonlinearly based on round size. Below $50M, the multiplier is 0.5× (the signal exists but is not a major capacity indicator). The curve ramps through $250M (1.0×, baseline) to $1B (1.8× for fundraising, 1.6× for completed funding) and caps at $5B (2.0×). Fundraising multipliers are slightly more aggressive than funding-completed because an active raise is a timing signal — the round hasn't closed yet, so there's still time to position.
+
+**Source confidence** discounts unreliable origins: SEC filing = 1.0, major news = 0.85, industry news = 0.7, blog = 0.5, social media = 0.35, rumor = 0.2.
+
+**Why hiring is weighted highest (25 points):** Infrastructure job postings are the strongest leading indicator of capacity buildout. Unlike funding signals (which are one-off events), hiring accumulates — each posting contributes 3 base points, so a company posting 8 GPU infra roles generates more signal pressure than a single funding announcement. The 45-day half-life reflects the lag between posting and actual procurement.
+
+**Engagement windows** — the period where outreach has the highest conversion probability:
+
+| Signal | Window | Action Insight |
+|---|---|---|
+| Outgrowing | 1–3 months | Provider dissatisfaction. They are in-market now. Competitive displacement. |
+| Funding Completed | 30–120 days | Capital deployed. Infrastructure purchasing follows within one quarter. |
+| Fundraising | 60–90 days | Active raise. Position Iren before the round closes. |
+| Hiring | 3–6 months | Capacity buildout coming. Start technical conversations now. |
+| AI Initiative | 3–9 months | Growing compute demand. Engage early on workload requirements. |
+| Cloud Spend | 6–12 months | Repatriation opportunity. Lead with TCO analysis. |
+
+**Score deltas** track movement over time. The system stores a scored snapshot on each scoring run and computes the delta between the two most recent scores. A rep doesn't just see "Anthropic: 78/100" — they see "Anthropic: 78/100, +12 this week." That delta is often more actionable than the absolute score.
+
+---
+
+## Competitive Intelligence
+
+24 competitors tracked across 6 named segments. Each competitor is profiled with key customers, pricing intel, strengths, weaknesses, and an Iren-relative threat level (high/medium/low).
+
+| Segment | Competitors | Iren Positioning |
+|---------|------------|------------------|
+| Neocloud (7) | CoreWeave, Crusoe, Lambda, Nebius, Voltage Park, etc. | Iren supplies the infrastructure neoclouds run on — they are both customers and competitors |
+| Hyperscaler (2) | AWS, Google Cloud | Iren builds overflow capacity when demand exceeds their DC pipeline |
+| DC REIT (2) | Equinix, Digital Realty | Iren differentiates on AI-ready high-density design and renewable energy cost advantage |
+| Power-First (2) | Lancium, Applied Digital | Direct competitors — same energy-first playbook |
+| International (1) | Adani Group | Iren competes on US proximity and operational track record |
+| Miner-to-HPC (6) | Hut 8, Core Scientific, Cipher Mining, HIVE Digital, TeraWulf, Bit Digital | Direct peers — same Bitcoin-to-AI pivot. Iren differentiates on execution speed, customer quality, renewable energy |
+
+**Prospect-level competitive context.** Every prospect's product fit maps to relevant competitor segments via `PRODUCT_FIT_TO_SEGMENTS`. When a rep opens a prospect, they see which competitors they're likely bidding against, recent competitive moves from those competitors, and Iren's positioning edge:
+
+- `ai_cloud` → Neocloud + Hyperscaler + Miner-to-HPC
+- `colocation` → DC REIT + Power-First
+- `build_to_suit` → Power-First + DC REIT + Miner-to-HPC
+
+**Deal threat detection.** The `/api/compete/deal-threats` endpoint cross-references the top third of prospects by score with competitor activity in their segment from the last 30 days. If a prospect is scoring high (active buying signals) AND a competitor in their segment just announced a deal, expansion, pricing change, or talent hire — that gets surfaced as a deal threat. This answers: "where do we have high-intent prospects AND active competitor movement at the same time?"
+
+---
+
+## Signal Deduplication
+
+Collectors run on schedules and will encounter the same story from multiple sources. The dedup pipeline has two layers:
+
+1. **Exact title match** — if a signal with the same title already exists for a company, skip it. Fast, no ML.
+2. **Semantic similarity** — if Ollama is running, embed the signal title and compare against all existing embeddings for that company using cosine similarity. Threshold: 0.85. This catches cases like "Anthropic raises $3B Series D" and "Anthropic closes $3 billion funding round" — different titles, same event.
+
+When Ollama is not available, the system falls back to exact-title-only dedup. No collector breaks, no errors — just slightly more duplicates that get cleaned up on the next run with embeddings enabled.
+
+---
+
+## AI Generation
+
+Three types of AI-generated output, all grounded in the actual signals collected. No hallucinated context — every prompt is assembled from real database rows.
+
+**Pre-call briefs.** The LLM receives structured context: company profile, funding stage (derived from total funding: <$10M = pre-seed/seed, <$50M = Series A, <$200M = Series B, <$500M = growth, ≥$500M = late-stage), product fit label, current score breakdown by category, the 15 most recent signals, up to 8 likely competitors (mapped from product fit to segment), competitor pricing intel, and the 5 most recent competitor moves. The prompt enforces: match the product pitch to product_fit, reference specific signals and scores, don't pitch Build-to-Suit to a Series B startup. Output structure: thesis, urgency, lead-with, decision makers, competitive context. Cached for 7 days.
+
+**Outreach emails.** Same context assembly, different prompt personality ("casual authority — like someone who understands their problem"). References a specific recent signal in the opening hook. Three paragraphs, under 120 words.
+
+**Battle cards.** Includes competitor data: capacity, GPU count, pricing, key customers, strengths, weaknesses, segment profile with Iren's positioning and key battleground, plus Iren's own self-assessment (strengths and weaknesses). The prompt requires honesty: "AEs lose trust in tools that only say good things." Includes word-for-word objection handling. 500–700 words.
+
+**Daily digest.** Premium tier (Opus 4.6 with adaptive thinking). The prompt is written as the CRO preparing a VP of Sales for standup. Rules: "cover the full funnel," "name names — never say 'several companies,'" "connect signals to Iren products," "give the VP something to DO — not 'monitor closely.'" Morning and afternoon editions with different lookback windows (18 hours overnight, 8 hours afternoon). Cached for 12 hours.
+
+---
+
 ## Data Architecture
 
-15 collectors. All free public sources. Zero paid subscriptions. Organized by the buyer journey stage they detect.
+15 collectors. All free public sources. Zero paid subscriptions.
 
 ### Need Detected
 
@@ -65,46 +153,41 @@ The scoring engine weights signals by product fit so reps know who to call, why,
 | HackerNews | HN Algolia API | `outgrowing` | Provider complaints, migration discussions |
 | Press Releases | Company press release pages | All types | Direct company announcements |
 
-### Four-Tier AI Cost Model
+### Competitive Intel
 
-| Tier | Model | Cost | Function |
-|---|---|---|---|
-| Free | Ollama `nomic-embed-text` (local) | $0 | Embeddings, semantic dedup, similar signal search |
-| Bulk | Gemini 2.5 Flash (OpenRouter) | ~$0.15/run | Signal classification, article summaries |
-| Analysis | Kimi K2 (OpenRouter) | ~$0.05/request | Briefs, outreach emails, battle cards |
-| Premium | Opus 4.6 (OpenRouter) | ~$0.10/digest | Daily digest with adaptive thinking (2x/day, cached) |
-
-$15 total budget: ~$4.50 for 30 collection runs, ~$2.50 for 50 analysis requests, ~$6.00 for 60 daily digests, ~$2.00 buffer. Premium falls back to analysis tier, analysis falls back to bulk, bulk falls back to keyword extraction. Every AI call has a zero-cost fallback path.
+| Collector | Source | What It Creates |
+|---|---|---|
+| Competitive Intel | DuckDuckGo web search | `CompetitorEvent` rows: deal, expansion, pricing, talent |
 
 ---
 
-## Scoring Model
+## Four-Tier AI Cost Model
 
-6 signal categories. Max 100 points. Exponential recency decay.
+| Tier | Model | Cost | Function | Fallback |
+|---|---|---|---|---|
+| Free | Ollama `nomic-embed-text` (local) | $0 | Embeddings, semantic dedup, similar signal search | Exact-title dedup only |
+| Bulk | Gemini 2.5 Flash (OpenRouter) | ~$0.15/run | Signal classification, article summaries | Keyword extraction |
+| Analysis | Kimi K2 (OpenRouter) | ~$0.05/request | Briefs, outreach emails, battle cards | Falls back to Bulk |
+| Premium | Opus 4.6 (OpenRouter) | ~$0.10/digest | Daily digest with adaptive thinking (2x/day) | Falls back to Analysis |
 
-| Signal | Max Points | Base Points | Half-Life | Buyer Stage | Urgency |
-|---|---|---|---|---|---|
-| Hiring | 25 | 3 per posting | 45 days | Need Detected | MEDIUM |
-| Fundraising | 20 | 15 | 30 days | Budget Available | HIGH |
-| Cloud Spend | 15 | 10 | 60 days | Need Detected | MEDIUM |
-| Funding Completed | 15 | 10 | 60 days | Budget Available | HIGH |
-| AI Initiative | 15 | 8 | 45 days | Need Detected | MEDIUM |
-| Outgrowing | 10 | 8 | 30 days | Actively Evaluating | URGENT |
+$15 total budget: ~$4.50 for 30 collection runs, ~$2.50 for 50 analysis requests, ~$6.00 for 60 daily digests, ~$2.00 buffer.
 
-The scoring is not a signal count. It is a **decay function that surfaces timing**.
+The fallback chain is strict and uni-directional: Premium → Analysis → Bulk → keywords. Bulk never escalates to Analysis on failure. Every AI call has a zero-cost fallback path, meaning the platform scores and surfaces prospects with no API keys configured.
 
-A $2B raise yesterday scores differently than the same raise 90 days ago. Magnitude multipliers scale funding signals: $50M = 0.6x, $250M = 1.0x, $1B = 1.8x, $5B = 2.0x. Source confidence weights discount unreliable sources: SEC filing = 1.0, major news = 0.85, industry news = 0.7, blog = 0.5, social media = 0.35, rumor = 0.2.
+---
 
-Each signal type has a computed **engagement window** — the period where outreach has the highest conversion probability:
+## Degradation Layers
 
-| Signal | Window | Action Insight |
+The platform is designed to be useful at every tier of infrastructure availability:
+
+| Layer | When it's running | When it's not |
 |---|---|---|
-| Outgrowing | 1–3 months | Provider dissatisfaction. They are in-market now. Competitive displacement. |
-| Funding Completed | 30–120 days | Capital deployed. Infrastructure purchasing follows within one quarter. |
-| Fundraising | 60–90 days | Active raise. Position Iren before the round closes. |
-| Hiring | 3–6 months | Capacity buildout coming. Start technical conversations now. |
-| AI Initiative | 3–9 months | Growing compute demand. Engage early on workload requirements. |
-| Cloud Spend | 6–12 months | Repatriation opportunity. Lead with TCO analysis. |
+| Ollama (embeddings) | Semantic dedup, similar-signal search | Exact-title dedup only, keyword search |
+| OpenRouter Bulk | LLM signal classification, summaries | Keyword/regex classification |
+| OpenRouter Analysis | AI briefs, emails, battle cards | Static template briefs |
+| OpenRouter Premium | AI daily digest | No digest (null response) |
+| All collectors | 15 data pipelines feeding signals | Score from whatever signals exist |
+| SQLite | Persistent signal + score history | Fresh start on re-seed |
 
 ---
 
@@ -116,11 +199,11 @@ A rep's morning with this platform:
 
 2. **Check the call list.** Rows colored by urgency. Each shows the "so what" and "by when." Outgrowing signals surface at the top.
 
-3. **Click into Anthropic.** Engagement windows: _"Hiring signal — engage technical buyer in 3–6 months."_ Score story explains why the score moved and which signals drove the change.
+3. **Click into Anthropic.** Score breakdown by category. Engagement window: _"Hiring signal — engage technical buyer in 3–6 months."_ Competitive context: likely bidding against CoreWeave and Lambda (Neocloud segment), with recent moves listed.
 
-4. **Generate a pre-call brief.** AI produces: thesis, urgency, lead-with, decision makers, competitive context — all grounded in the signals actually collected.
+4. **Generate a pre-call brief.** AI produces: thesis (why they need Iren and which product), urgency (specific signal and timing), lead-with (opening line for the call), decision makers (titles and why), competitive context (who's pitching, Iren's angle) — all grounded in the signals actually collected.
 
-5. **Draft outreach.** AI writes an email referencing the specific signals detected: the roles posted, the papers published, the funding announced.
+5. **Draft outreach.** AI writes an email referencing the specific signals detected: the roles posted, the papers published, the funding announced. Under 120 words. Not salesy.
 
 ---
 
@@ -129,11 +212,14 @@ A rep's morning with this platform:
 | Choice | Rationale |
 |---|---|
 | **SQLite** over Postgres | Portable, zero-config, single-file DB. 290 companies and thousands of signals fit comfortably. Easy to demo, easy to deploy. |
-| **OpenRouter** over direct APIs | Model flexibility. Switch between Kimi K2, Gemini Flash, or any model by changing an env var. No vendor lock-in. |
+| **OpenRouter** over direct APIs | Model flexibility. Switch between Kimi K2, Gemini Flash, Opus 4.6, or any model by changing an env var. No vendor lock-in. |
 | **Ollama** for embeddings | Zero cost, local execution, no data leaves the machine. Powers semantic dedup and search without API spend. |
 | **Keyword fallbacks everywhere** | Every AI function works without an API key. The platform is fully useful with zero LLM budget. |
 | **Free data sources only** | 15 collectors, all public APIs or RSS feeds. No Crunchbase, no ZoomInfo, no paid subscriptions. |
 | **Recency decay over raw counts** | Signals lose relevance over time. A scoring model that reflects this surfaces timing, not just volume. |
+| **Product data in config, not prompts** | `IREN_BENCHMARK` stores Iren's capacity, products, GPUs, locations, strengths, weaknesses. Every prompt reads from it via `_build_iren_context()`. When Iren's capacity changes, update one dict — every brief, email, and battle card reflects it. |
+| **Strict fallback direction** | Premium → Analysis → Bulk → keywords. Never escalates upward on failure. Predictable cost ceiling. |
+| **Brief caching (7 days)** | AI briefs are cached per-company in the DB. Avoids re-generating the same brief on every page load while keeping content reasonably fresh. Digests cache for 12 hours. |
 
 ---
 

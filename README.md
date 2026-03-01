@@ -1,6 +1,6 @@
 # Iren Sales Intelligence Platform
 
-Signal-driven GTM intelligence for Iren's commercial team — 290 prospects across 15 segments, 20+ competitors across 6 market segments, 15 data collectors, AI-generated briefs, and a scoring engine that surfaces timing.
+Signal-driven GTM intelligence for Iren's commercial team — 290 prospects across 15 segments, 24 competitors across 6 market segments, 15 data collectors, AI-generated briefs, and a scoring engine that surfaces timing.
 
 ## The Problem
 
@@ -20,7 +20,7 @@ Signal intelligence mapped to the buyer journey. Every prospect signal maps to o
 
 15 data collectors pull from free public sources. A weighted scoring engine with exponential recency decay ranks prospects across 6 signal categories (max 100 points). AI-generated briefs surface what happened, why it matters, what to do, and by when. Four-tier LLM cost model runs the entire collection pipeline for ~$0.15/run, with a premium Opus 4.6 tier for the daily digest.
 
-A competitive intelligence layer tracks 20+ competitors across 6 market segments (Neocloud, Hyperscaler, DC REIT, Power-First, International, Miner-to-HPC), each profiled with key customers, pricing intel, strengths/weaknesses, and an Iren-relative threat level. Prospect-level competitive context maps which competitors a rep is likely bidding against for any given deal, based on the prospect's product fit.
+A competitive intelligence layer tracks 24 competitors across 6 market segments (Neocloud, Hyperscaler, DC REIT, Power-First, International, Miner-to-HPC), each profiled with key customers, pricing intel, strengths/weaknesses, and an Iren-relative threat level. Prospect-level competitive context maps which competitors a rep is likely bidding against for any given deal, based on the prospect's product fit.
 
 ## Architecture
 
@@ -136,7 +136,7 @@ All collectors inherit from `BaseCollector` which handles session management, se
 
 ## Competitive Intelligence
 
-20+ competitors tracked across 6 market segments. Each competitor is profiled with key customers, pricing intel, strengths, weaknesses, and an Iren-relative threat level (high/medium/low). This is the data a Bain GTM strategy team would compile — structured for reps, not analysts.
+24 competitors tracked across 6 market segments. Each competitor is profiled with key customers, pricing intel, strengths, weaknesses, and an Iren-relative threat level (high/medium/low). This is the data a Bain GTM strategy team would compile — structured for reps, not analysts.
 
 | Segment | Competitors | Key Battleground | Iren Positioning |
 |---------|------------|------------------|------------------|
@@ -166,7 +166,7 @@ points = base_points × recency_decay × magnitude_multiplier × source_confiden
 ```
 
 - **Recency decay**: exponential half-life per signal type (30–60 days). A hiring signal from last week scores higher than one from three months ago.
-- **Magnitude multiplier**: tiered thresholds for funding amounts — a $1B raise scores 1.8× while a $50M raise scores 0.6×. Scales up to 2.0× at $5B+.
+- **Magnitude multiplier**: tiered thresholds for funding amounts. Below $50M = 0.5× baseline. Ramps through $250M (1.0×) to $1B (1.6–1.8× depending on signal type) and caps at $5B+ (2.0×). Fundraising multipliers are slightly more aggressive than funding-completed because an active raise is a timing signal.
 - **Source confidence**: SEC filing (1.0) → major news (0.85) → industry news (0.7) → blog (0.5) → social media (0.35) → rumor (0.2).
 - **Category cap**: each signal type has a max_points ceiling. All caps sum to 100.
 
