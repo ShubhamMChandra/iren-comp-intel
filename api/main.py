@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from config import (
+    COLLECT_SCHEDULE_HOUR,
     CORS_ORIGINS,
     LOG_LEVEL,
     SIGNAL_TYPES,
@@ -23,6 +24,9 @@ from config import (
     PRODUCT_FIT_TO_SEGMENTS,
 )
 
+from contextlib import asynccontextmanager
+
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -46,7 +50,40 @@ from ai.embeddings import deserialize_embedding, cosine_similarity
 init_db()
 auto_seed_if_empty()
 
-app = FastAPI(title="Iren Sales Intelligence API", version="1.0.0")
+
+def _scheduled_collect() -> None:
+    from collectors.runner import run_collectors
+    logger.info("Scheduled collection starting")
+    run_collectors()
+    score_all_prospects()
+    logger.info("Scheduled collection complete")
+
+
+def _startup_collect_if_empty() -> None:
+    """If signals table is empty on boot, trigger a collection immediately in background."""
+    session = get_session()
+    try:
+        from database.models import Signal
+        if session.query(Signal).count() == 0:
+            logger.info("No signals found on startup — triggering immediate collection")
+            import threading
+            threading.Thread(target=_scheduled_collect, daemon=True).start()
+    finally:
+        session.close()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler = BackgroundScheduler(timezone="UTC")
+    scheduler.add_job(_scheduled_collect, "cron", hour=COLLECT_SCHEDULE_HOUR, minute=0)
+    scheduler.start()
+    logger.info("Scheduler started — daily collection at %02d:00 UTC", COLLECT_SCHEDULE_HOUR)
+    _startup_collect_if_empty()
+    yield
+    scheduler.shutdown(wait=False)
+
+
+app = FastAPI(title="Iren Sales Intelligence API", version="1.0.0", lifespan=lifespan)
 
 
 class RequestLogMiddleware(BaseHTTPMiddleware):

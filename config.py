@@ -42,6 +42,9 @@ AI_MODEL_BULK = os.getenv("AI_MODEL_BULK", "google/gemini-2.5-flash")
 AI_MODEL_ANALYSIS = os.getenv("AI_MODEL_ANALYSIS", "") or AI_MODEL
 AI_MODEL_PREMIUM = os.getenv("AI_MODEL_PREMIUM", "anthropic/claude-4.6-opus-20260205")
 
+# Scheduler — UTC hour to run daily collection (default 7am UTC)
+COLLECT_SCHEDULE_HOUR = int(os.getenv("COLLECT_SCHEDULE_HOUR", "7"))
+
 SEC_EDGAR_USER_AGENT = os.getenv(
     "SEC_EDGAR_USER_AGENT",
     "IrenIntel research@iren.com",
