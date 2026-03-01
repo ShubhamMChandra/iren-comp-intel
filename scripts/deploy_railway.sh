@@ -15,6 +15,11 @@ if [[ "$SERVICE" != "api" && "$SERVICE" != "frontend" ]]; then
   exit 1
 fi
 
+echo "Running Railway pre-deploy checks..."
+cd "$ROOT"
+python3 -m pytest -m railway -q --tb=short
+echo "Pre-deploy checks passed."
+
 echo "Deploying $SERVICE to Railway..."
 railway service "$SERVICE"
 
