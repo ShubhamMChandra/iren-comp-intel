@@ -60,14 +60,20 @@ def _scheduled_collect() -> None:
 
 
 def _startup_collect_if_empty() -> None:
-    """If signals table is empty on boot, trigger a collection immediately in background."""
+    """If signals table is empty on boot, trigger collection after a short delay so the API can start serving."""
     session = get_session()
     try:
         from database.models import Signal
         if session.query(Signal).count() == 0:
-            logger.info("No signals found on startup — triggering immediate collection")
+            logger.info("No signals found on startup — scheduling collection in 30s")
             import threading
-            threading.Thread(target=_scheduled_collect, daemon=True).start()
+            import time as _time
+
+            def _delayed():
+                _time.sleep(30)
+                _scheduled_collect()
+
+            threading.Thread(target=_delayed, daemon=True).start()
     finally:
         session.close()
 

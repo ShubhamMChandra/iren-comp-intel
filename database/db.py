@@ -21,7 +21,8 @@ SessionLocal = sessionmaker(bind=engine)
 def _enable_wal(conn, _):
     """Enable WAL journal mode to allow concurrent reads/writes."""
     if DATABASE_URL.startswith("sqlite"):
-        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute(text("PRAGMA journal_mode=WAL"))
+        conn.execute(text("PRAGMA busy_timeout=10000"))
 
 
 if DATABASE_URL.startswith("sqlite"):
