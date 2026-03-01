@@ -199,6 +199,17 @@ export default function CompetePage() {
     return activityFeed.filter((item) => item.event_type === activityFilter)
   }, [activityFeed, activityFilter])
 
+  const activityTypesWithCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const item of activityFeed) {
+      const t = item.event_type || "other"
+      counts[t] = (counts[t] || 0) + 1
+    }
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, count]) => ({ type, count }))
+  }, [activityFeed])
+
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir((d) => (d === "desc" ? "asc" : "desc"))
@@ -206,6 +217,16 @@ export default function CompetePage() {
       setSortKey(key)
       setSortDir(key === "name" ? "asc" : "desc")
     }
+  }
+
+  const openCompetitor = (id: number) => {
+    setSelectedId(id)
+    setBattlecard(null)
+    setBcLoading(true)
+    generateBattlecard(id)
+      .then((res) => setBattlecard(res.battlecard))
+      .catch(() => setBattlecard("Failed to generate battle card."))
+      .finally(() => setBcLoading(false))
   }
 
   const handleBattlecard = async () => {
@@ -225,7 +246,7 @@ export default function CompetePage() {
     return (
       <div className="p-6 space-y-6">
         <Skeleton className="h-8 w-48" />
-        <div className="grid gap-4 grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20" />)}
         </div>
         <Skeleton className="h-96" />
@@ -283,7 +304,7 @@ export default function CompetePage() {
 
       {/* Three-tab layout: Activity (default) → Deal Threats → Directory */}
       <Tabs defaultValue="activity" className="space-y-4">
-        <TabsList>
+        <TabsList className="overflow-x-auto">
           <TabsTrigger value="activity" className="gap-1.5">
             <Activity className="h-3.5 w-3.5" /> Activity Feed
           </TabsTrigger>
@@ -300,13 +321,13 @@ export default function CompetePage() {
 
         {/* ===== TAB 1: ACTIVITY FEED (default) ===== */}
         <TabsContent value="activity" className="space-y-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant={activityFilter === "all" ? "default" : "outline"} className="h-7 text-xs" onClick={() => setActivityFilter("all")}>
-              All
+              All{activityFeed.length > 0 ? ` (${activityFeed.length})` : ""}
             </Button>
-            {["deal", "expansion", "pricing", "talent"].map((type) => (
+            {activityTypesWithCounts.map(({ type, count }) => (
               <Button key={type} size="sm" variant={activityFilter === type ? "default" : "outline"} className="h-7 text-xs capitalize" onClick={() => setActivityFilter(type)}>
-                {type}
+                {type.replace(/_/g, " ")} ({count})
               </Button>
             ))}
           </div>
@@ -372,7 +393,7 @@ export default function CompetePage() {
             ))}
           </div>
 
-          <Card className="border-border/50">
+          <Card className="border-border/50 overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -383,10 +404,10 @@ export default function CompetePage() {
                   <TableHead className="cursor-pointer select-none text-xs" onClick={() => toggleSort("threat_level")}>
                     Threat <SortIcon sortKey="threat_level" currentKey={sortKey} dir={sortDir} />
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none text-xs" onClick={() => toggleSort("capacity_mw")}>
+                  <TableHead className="cursor-pointer select-none text-xs hidden md:table-cell" onClick={() => toggleSort("capacity_mw")}>
                     MW <SortIcon sortKey="capacity_mw" currentKey={sortKey} dir={sortDir} />
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none text-xs text-right" onClick={() => toggleSort("signal_count_30d")}>
+                  <TableHead className="cursor-pointer select-none text-xs text-right hidden md:table-cell" onClick={() => toggleSort("signal_count_30d")}>
                     Activity <SortIcon sortKey="signal_count_30d" currentKey={sortKey} dir={sortDir} />
                   </TableHead>
                 </TableRow>
@@ -406,15 +427,15 @@ export default function CompetePage() {
                     <TableCell>
                       <Badge variant="outline" className="text-[10px] text-[#22c55e] border-[#22c55e]/30">YOU</Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       {iren.capacity_mw ? <CapacityBar mw={iren.capacity_mw} maxMw={maxCapacity} /> : "—"}
                     </TableCell>
-                    <TableCell className="text-right text-muted-foreground">—</TableCell>
+                    <TableCell className="text-right text-muted-foreground hidden md:table-cell">—</TableCell>
                   </TableRow>
                 )}
 
                 {filtered.map((c) => (
-                  <TableRow key={c.id} className="cursor-pointer" onClick={() => { setSelectedId(c.id); setBattlecard(null) }}>
+                  <TableRow key={c.id} className="cursor-pointer" onClick={() => openCompetitor(c.id)}>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{c.name}</span>
@@ -426,10 +447,10 @@ export default function CompetePage() {
                     </TableCell>
                     <TableCell><SegmentBadge segment={c.segment} /></TableCell>
                     <TableCell><ThreatBadge level={c.threat_level} /></TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       {c.capacity_mw ? <CapacityBar mw={c.capacity_mw} maxMw={maxCapacity} /> : <span className="text-muted-foreground">—</span>}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-right tabular-nums hidden md:table-cell">
                       {c.signal_count_30d > 0 ? (
                         <span className="inline-flex items-center gap-1">
                           <Activity className="h-3 w-3 text-[#22c55e]" />
@@ -583,8 +604,15 @@ export default function CompetePage() {
                   </h3>
                   <Button size="sm" variant="outline" onClick={handleBattlecard} disabled={bcLoading} className="gap-1.5">
                     {bcLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Swords className="h-3 w-3" />}
-                    Generate Battle Card
+                    {battlecard ? "Regenerate Battle Card" : bcLoading ? "Generating…" : "Generate Battle Card"}
                   </Button>
+                  {bcLoading && !battlecard && (
+                    <div className="mt-3 rounded-md border border-border/30 bg-muted/30 p-3 space-y-2">
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-5/6" />
+                      <Skeleton className="h-3 w-4/6" />
+                    </div>
+                  )}
                   {battlecard && (
                     <div className="mt-3 rounded-md border border-border/30 bg-muted/30 p-3">
                       <pre className="text-sm whitespace-pre-wrap font-sans">{battlecard}</pre>
@@ -665,7 +693,13 @@ function ActivityItem({ item }: { item: ActivityFeedItem }) {
             <span className="text-xs font-medium">{item.company_name}</span>
             <span className="text-[10px] text-muted-foreground">{formatDate(item.detected_at)}</span>
           </div>
-          <p className="text-xs text-muted-foreground truncate">{item.title}</p>
+          {item.source_url ? (
+            <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground truncate block hover:text-primary hover:underline">
+              {item.title}
+            </a>
+          ) : (
+            <p className="text-xs text-muted-foreground truncate">{item.title}</p>
+          )}
           {item.description && <p className="text-[11px] text-muted-foreground/70 mt-0.5 line-clamp-2">{item.description}</p>}
         </div>
         {item.source_url && (
